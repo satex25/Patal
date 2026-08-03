@@ -3,6 +3,8 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
+  "author": "satex25",
+  "license": "UNLICENSED",
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",

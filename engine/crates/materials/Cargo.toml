@@ -2,4 +2,5 @@
 name = "patruin-materials"
 version.workspace = true
 edition.workspace = true
+authors.workspace = true
 publish.workspace = true

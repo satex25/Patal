@@ -10,6 +10,9 @@ members = [
 [workspace.package]
 version = "0.1.0"
 edition = "2021"
+authors = ["satex25"]
+# Proprietary: see the LICENSE at the repository root. `publish = false` is the
+# machine-enforced half of that — these crates cannot reach crates.io by accident.
 publish = false
 
 [profile.release]

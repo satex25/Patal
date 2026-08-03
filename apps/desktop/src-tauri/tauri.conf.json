@@ -26,6 +26,10 @@
   "bundle": {
     "active": true,
     "targets": "all",
+    "publisher": "satex25",
+    "homepage": "https://satex25.co",
+    "copyright": "Copyright (c) 2026 satex25. All rights reserved.",
+    "licenseFile": "../../../LICENSE",
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
