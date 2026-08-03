@@ -1,8 +1,12 @@
 # Patruin
 
-Patruin — the modern Irish word for patterns (patrún). A professional
-garment pattern creation platform: from idea to production-ready pattern in
+Patruin — the modern Irish word for patterns (patrún). 
+
+A professional garment pattern creation platform: from idea to production-ready pattern in
 one workspace, across iPhone, iPad, Mac, and Windows.
+
+- Repo: [github.com/satex25/patruin](https://github.com/satex25/patruin)
+- Website / downloads: [satex25.co](https://satex25.co)
 
 The full founding memorandum is in [`docs/memorandum.md`](docs/memorandum.md).
 Everything below is the technical shape it maps to.
@@ -85,4 +89,4 @@ cd apps/desktop && npm install && npm run tauri dev
 
 ## License
 
-Proprietary — see [`LICENSE`](LICENSE).
+MIT — see [`LICENSE`](LICENSE).
