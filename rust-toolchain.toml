@@ -1,0 +1,9 @@
+# Pinned, not floating. A toolchain bump should be a reviewable commit, not
+# something that silently changes because someone ran `rustup update`.
+# Covers both engine/ and apps/desktop/src-tauri/ — any `cargo` invocation
+# under this tree picks it up. Bump deliberately, then re-run the test suite
+# and clippy in both workspaces.
+[toolchain]
+channel = "1.97.1"
+components = ["rustfmt", "clippy"]
+profile = "minimal"

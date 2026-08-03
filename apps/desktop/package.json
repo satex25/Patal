@@ -5,6 +5,9 @@
   "type": "module",
   "author": "satex25",
   "license": "UNLICENSED",
+  "engines": {
+    "node": ">=24.18.1"
+  },
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",

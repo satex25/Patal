@@ -1,0 +1,106 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Cancel superseded runs on the same branch/PR rather than let them queue.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  engine:
+    name: engine (Rust workspace)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # rust-toolchain.toml at the repo root pins the exact channel and
+      # components; rustup (preinstalled on GitHub runners) picks it up
+      # automatically the first time cargo/rustc runs in this checkout.
+      - name: Resolve pinned toolchain
+        run: rustup show
+
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            engine/target
+          key: ${{ runner.os }}-cargo-engine-${{ hashFiles('engine/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-engine-
+
+      - name: cargo fmt --check
+        working-directory: engine
+        run: cargo fmt --check
+
+      - name: cargo clippy -D warnings
+        working-directory: engine
+        run: cargo clippy --workspace --all-targets --locked -- -D warnings
+
+      - name: cargo test
+        working-directory: engine
+        run: cargo test --workspace --locked
+
+  desktop:
+    name: desktop (Tauri + frontend)
+    # macOS avoids guessing at webkit2gtk/libayatana-appindicator apt
+    # package names for a Linux Tauri build — the Rust side here links
+    # native WKWebView on macOS, so `cargo check`/`clippy` need nothing
+    # beyond the Xcode Command Line Tools already on this runner. The
+    # README's desktop target is Mac/Windows, not Linux, so this matches.
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve pinned toolchain
+        run: rustup show
+
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            apps/desktop/src-tauri/target
+          key: ${{ runner.os }}-cargo-desktop-${{ hashFiles('apps/desktop/src-tauri/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-desktop-
+
+      - name: cargo clippy -D warnings
+        working-directory: apps/desktop/src-tauri
+        run: cargo clippy --all-targets --locked -- -D warnings
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: apps/desktop/.nvmrc
+          cache: npm
+          cache-dependency-path: apps/desktop/package-lock.json
+
+      - name: npm ci
+        working-directory: apps/desktop
+        run: npm ci
+
+      - name: npm run build
+        working-directory: apps/desktop
+        run: npm run build
+
+  native:
+    name: native (Swift package)
+    # Full Xcode (not just Command Line Tools) ships on GitHub's macOS
+    # runners, so `swift test` runs for real here even though it can't in
+    # every local dev environment — see apps/native/README.md.
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: swift build
+        working-directory: apps/native
+        run: swift build
+
+      - name: swift test
+        working-directory: apps/native
+        run: swift test

@@ -4,7 +4,6 @@
 # Rust
 /engine/target/
 **/target/
-/engine/Cargo.lock
 
 # Node / frontend
 node_modules/

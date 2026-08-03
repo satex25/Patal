@@ -10,6 +10,11 @@ members = [
 [workspace.package]
 version = "0.1.0"
 edition = "2021"
+# The version this workspace is built and tested against — see
+# /rust-toolchain.toml at the repository root, which pins exactly this.
+# Not a guessed-lower MSRV floor: a claim this crate compiles on some older
+# toolchain would be untested and untrue until someone actually verifies it.
+rust-version = "1.97.1"
 authors = ["satex25"]
 # Proprietary: see the LICENSE at the repository root. `publish = false` is the
 # machine-enforced half of that — these crates cannot reach crates.io by accident.
