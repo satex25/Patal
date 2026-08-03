@@ -2079,10 +2079,16 @@ dependencies = [
 [[package]]
 name = "patruin-geometry"
 version = "0.1.0"
+dependencies = [
+ "serde",
+]
 
 [[package]]
 name = "patruin-materials"
 version = "0.1.0"
+dependencies = [
+ "serde",
+]
 
 [[package]]
 name = "patruin-pattern"
@@ -2090,6 +2096,7 @@ version = "0.1.0"
 dependencies = [
  "patruin-geometry",
  "patruin-materials",
+ "serde",
 ]
 
 [[package]]

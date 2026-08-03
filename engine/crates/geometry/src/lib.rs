@@ -15,6 +15,8 @@
 
 use std::fmt;
 
+use serde::{Deserialize, Serialize};
+
 /// Everything that can go wrong in this crate.
 #[derive(Debug, Clone, PartialEq)]
 pub enum GeometryError {
@@ -86,7 +88,7 @@ pub enum Winding {
 }
 
 /// A point in pattern space, in millimeters.
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct Point2 {
     pub x: f64,
     pub y: f64,
@@ -121,9 +123,31 @@ impl Point2 {
 /// has at least 3 points, all finite, with no two consecutive points equal
 /// and no repeated closing point. `points` is private to keep that true for
 /// the value's whole life rather than only at its birth.
-#[derive(Debug, Clone, PartialEq)]
+///
+/// On the wire this type *is* a `Vec<Point2>` — `#[serde(try_from, into)]`
+/// routes deserialization through [`PatternBoundary::new`], so a document
+/// loaded from disk or across the FFI boundary cannot skip validation the
+/// way a plain `#[derive(Deserialize)]` on a private field would silently
+/// allow (serde would refuse to compile that, but a wrapper DTO could have
+/// smuggled an invalid boundary through unless it, too, validated).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(try_from = "Vec<Point2>", into = "Vec<Point2>")]
 pub struct PatternBoundary {
     points: Vec<Point2>,
+}
+
+impl TryFrom<Vec<Point2>> for PatternBoundary {
+    type Error = GeometryError;
+
+    fn try_from(points: Vec<Point2>) -> Result<Self, Self::Error> {
+        Self::new(points)
+    }
+}
+
+impl From<PatternBoundary> for Vec<Point2> {
+    fn from(boundary: PatternBoundary) -> Self {
+        boundary.points
+    }
 }
 
 /// Corner joins longer than this multiple of the offset distance are cut off
@@ -657,5 +681,71 @@ mod tests {
         .expect("valid");
         assert!(bowtie.self_intersects());
         assert!(!square(10.0).self_intersects());
+    }
+
+    #[test]
+    fn point_round_trips_through_json() {
+        let point = Point2::new(12.5, -3.25);
+        let json = serde_json::to_string(&point).unwrap();
+        assert_eq!(json, r#"{"x":12.5,"y":-3.25}"#);
+        assert_eq!(serde_json::from_str::<Point2>(&json).unwrap(), point);
+    }
+
+    #[test]
+    fn pattern_boundary_wire_format_is_a_bare_point_array() {
+        // The boundary's invariants (>=3 points, all finite) live in
+        // PatternBoundary::new, not in a wrapper DTO — so the wire format
+        // can stay exactly what the constructor takes, a Vec<Point2>, with
+        // no extra envelope to keep in sync.
+        let json = serde_json::to_string(&square(10.0)).unwrap();
+        assert_eq!(
+            json,
+            r#"[{"x":0.0,"y":0.0},{"x":10.0,"y":0.0},{"x":10.0,"y":10.0},{"x":0.0,"y":10.0}]"#
+        );
+    }
+
+    #[test]
+    fn pattern_boundary_round_trips_through_json() {
+        let original = square(10.0);
+        let json = serde_json::to_string(&original).unwrap();
+        let restored: PatternBoundary = serde_json::from_str(&json).unwrap();
+        assert_eq!(restored, original);
+    }
+
+    #[test]
+    fn deserializing_too_few_points_is_rejected() {
+        // A malformed or hand-edited project file gets a deserialization
+        // error at load time, not a PatternBoundary that silently violates
+        // its own invariant.
+        let err = serde_json::from_str::<PatternBoundary>(r#"[{"x":0.0,"y":0.0}]"#).unwrap_err();
+        assert!(err.to_string().contains("at least 3"));
+    }
+
+    #[test]
+    fn deserializing_non_finite_point_is_rejected() {
+        let err = serde_json::from_str::<PatternBoundary>(
+            r#"[{"x":0.0,"y":0.0},{"x":10.0,"y":0.0},{"x":"NaN","y":10.0}]"#,
+        );
+        // Either serde_json itself refuses the non-numeric literal, or (for
+        // an f64 value it does accept, like a huge float) PatternBoundary's
+        // own finiteness check catches it. Both are acceptable; a silently
+        // accepted non-finite point is not.
+        assert!(err.is_err());
+    }
+
+    #[test]
+    fn deserializing_dedups_duplicate_consecutive_points_like_the_constructor() {
+        // Loading a document must not be a back door around the guard that
+        // used to poison offset() with NaN — see
+        // duplicate_consecutive_points_are_dropped_not_divided_by above.
+        let json = r#"[
+            {"x":0.0,"y":0.0},
+            {"x":100.0,"y":0.0},
+            {"x":100.0,"y":0.0},
+            {"x":100.0,"y":200.0},
+            {"x":0.0,"y":200.0}
+        ]"#;
+        let boundary: PatternBoundary = serde_json::from_str(json).unwrap();
+        assert_eq!(boundary.points().len(), 4);
     }
 }

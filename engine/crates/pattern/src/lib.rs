@@ -14,6 +14,7 @@ use std::fmt;
 
 use patruin_geometry::{GeometryError, PatternBoundary};
 use patruin_materials::Material;
+use serde::{Deserialize, Serialize};
 
 /// Everything that can go wrong assembling a pattern.
 #[derive(Debug, Clone, PartialEq)]
@@ -54,7 +55,7 @@ impl From<GeometryError> for PatternError {
 }
 
 /// A single named measurement (e.g. "bust", "waist"), stored in millimeters.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Measurement {
     pub name: String,
     pub value_mm: f64,
@@ -62,12 +63,53 @@ pub struct Measurement {
 
 /// One cuttable piece of a garment: its outline, seam allowance, and the
 /// material it will be cut from.
-#[derive(Debug, Clone)]
+///
+/// Serializes and deserializes through [`PatternPieceData`], the same way
+/// `PatternBoundary` goes through a plain `Vec<Point2>`: the wire format is
+/// the natural shape, but arriving values are re-validated by
+/// [`PatternPiece::set_seam_allowance_mm`] rather than assigned directly —
+/// a `.patruin` file edited by hand, or written by a future version with a
+/// looser rule, cannot load a piece with a seam allowance that would
+/// silently invert the cut line the way the old bare `pub f64` did.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(try_from = "PatternPieceData", into = "PatternPieceData")]
 pub struct PatternPiece {
     pub name: String,
     pub boundary: PatternBoundary,
     seam_allowance_mm: f64,
     pub material: Option<Material>,
+}
+
+/// The wire shape of a [`PatternPiece`] — everything the constructor plus
+/// the seam-allowance setter need, and nothing that isn't also public API.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct PatternPieceData {
+    name: String,
+    boundary: PatternBoundary,
+    seam_allowance_mm: f64,
+    material: Option<Material>,
+}
+
+impl TryFrom<PatternPieceData> for PatternPiece {
+    type Error = PatternError;
+
+    fn try_from(data: PatternPieceData) -> Result<Self, Self::Error> {
+        let mut piece = PatternPiece::new(data.name, data.boundary);
+        piece.set_seam_allowance_mm(data.seam_allowance_mm)?;
+        piece.material = data.material;
+        Ok(piece)
+    }
+}
+
+impl From<PatternPiece> for PatternPieceData {
+    fn from(piece: PatternPiece) -> Self {
+        Self {
+            name: piece.name,
+            boundary: piece.boundary,
+            seam_allowance_mm: piece.seam_allowance_mm,
+            material: piece.material,
+        }
+    }
 }
 
 impl PatternPiece {
@@ -108,7 +150,11 @@ impl PatternPiece {
 }
 
 /// A garment project: its pieces and the body measurements driving them.
-#[derive(Debug, Default, Clone)]
+///
+/// No invariant of its own to protect on the wire — each `PatternPiece`
+/// already validates itself on deserialization, so a plain derive here is
+/// enough; `Project` doesn't need to re-check what its elements guarantee.
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct Project {
     pub name: String,
     pub pieces: Vec<PatternPiece>,
@@ -232,5 +278,69 @@ mod tests {
         assert_eq!(project.measurement("waist"), Some(700.0));
         assert_eq!(project.measurement("hip"), None);
         assert_eq!(project.measurements.len(), 2);
+    }
+
+    #[test]
+    fn measurement_round_trips_through_json() {
+        let m = Measurement {
+            name: "bust".to_string(),
+            value_mm: 900.0,
+        };
+        let json = serde_json::to_string(&m).unwrap();
+        assert_eq!(serde_json::from_str::<Measurement>(&json).unwrap(), m);
+    }
+
+    #[test]
+    fn pattern_piece_round_trips_through_json() {
+        let mut piece = PatternPiece::new("Front Bodice", square_boundary(200.0));
+        piece.set_seam_allowance_mm(12.5).unwrap();
+        piece.material = Some(Material::new("Silk Charmeuse"));
+
+        let json = serde_json::to_string(&piece).unwrap();
+        let restored: PatternPiece = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(restored.name, piece.name);
+        assert_eq!(restored.boundary, piece.boundary);
+        assert_eq!(restored.seam_allowance_mm(), 12.5);
+        assert_eq!(
+            restored.material.as_ref().unwrap().name,
+            "Silk Charmeuse"
+        );
+    }
+
+    #[test]
+    fn deserializing_negative_seam_allowance_is_rejected() {
+        // The bare pub f64 this used to be let a hand-edited or corrupted
+        // .patruin file load a piece that would cut nine times too large,
+        // silently. Loading one now fails instead.
+        let json = r#"{
+            "name": "Front Bodice",
+            "boundary": [
+                {"x":0.0,"y":0.0},{"x":200.0,"y":0.0},
+                {"x":200.0,"y":300.0},{"x":0.0,"y":300.0}
+            ],
+            "seam_allowance_mm": -1000.0,
+            "material": null
+        }"#;
+        let err = serde_json::from_str::<PatternPiece>(json).unwrap_err();
+        assert!(err.to_string().contains("finite and non-negative"));
+    }
+
+    #[test]
+    fn project_round_trips_through_json_including_nested_validation() {
+        let mut project = Project::new("Wrap Dress");
+        let mut piece = PatternPiece::new("Skirt Panel", square_boundary(300.0));
+        piece.set_seam_allowance_mm(15.0).unwrap();
+        piece.material = Some(Material::new("Silk Charmeuse"));
+        project.add_piece(piece);
+        project.set_measurement("waist", 700.0);
+
+        let json = serde_json::to_string(&project).unwrap();
+        let restored: Project = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(restored.name, "Wrap Dress");
+        assert_eq!(restored.measurement("waist"), Some(700.0));
+        let piece = restored.find_piece("Skirt Panel").expect("piece present");
+        assert_eq!(piece.seam_allowance_mm(), 15.0);
     }
 }
