@@ -89,4 +89,5 @@ cd apps/desktop && npm install && npm run tauri dev
 
 ## License
 
-MIT — see [`LICENSE`](LICENSE).
+Proprietary — see [`LICENSE`](LICENSE). The source is public for reference;
+that is not a grant of any right to use it.
