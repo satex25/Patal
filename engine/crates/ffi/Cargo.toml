@@ -1,0 +1,22 @@
+[package]
+name = "patruin-ffi"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[lib]
+crate-type = ["lib", "cdylib", "staticlib"]
+
+[dependencies]
+patruin-geometry = { path = "../geometry" }
+patruin-materials = { path = "../materials" }
+patruin-pattern = { path = "../pattern" }
+uniffi = "0.28"
+
+[[bin]]
+name = "uniffi-bindgen"
+path = "src/bin/uniffi-bindgen.rs"
+required-features = ["cli"]
+
+[features]
+cli = ["uniffi/cli"]

@@ -1,0 +1,9 @@
+[package]
+name = "patruin-pattern"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[dependencies]
+patruin-geometry = { path = "../geometry" }
+patruin-materials = { path = "../materials" }

@@ -1,0 +1,23 @@
+# macOS
+.DS_Store
+
+# Rust
+/engine/target/
+**/target/
+/engine/Cargo.lock
+
+# Node / frontend
+node_modules/
+dist/
+apps/desktop/src-tauri/target/
+
+# Swift / Xcode
+.build/
+*.xcodeproj/xcuserdata/
+*.xcworkspace/xcuserdata/
+DerivedData/
+.swiftpm/
+
+# Editors
+.vscode/
+.idea/
