@@ -8,8 +8,50 @@
 //! itself is a deliberately separate, larger milestone and is not yet
 //! implemented here.
 
-use patruin_geometry::PatternBoundary;
+#![forbid(unsafe_code)]
+
+use std::fmt;
+
+use patruin_geometry::{GeometryError, PatternBoundary};
 use patruin_materials::Material;
+
+/// Everything that can go wrong assembling a pattern.
+#[derive(Debug, Clone, PartialEq)]
+pub enum PatternError {
+    /// A seam allowance must be a finite, non-negative number of millimeters.
+    /// A negative one does not trim the piece — it drives the offset inward
+    /// past its own edges and yields a larger, winding-inverted outline.
+    InvalidSeamAllowance { value_mm: f64 },
+    /// The underlying geometry could not produce a cut line.
+    Geometry(GeometryError),
+}
+
+impl fmt::Display for PatternError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::InvalidSeamAllowance { value_mm } => write!(
+                f,
+                "seam allowance {value_mm}mm must be finite and non-negative"
+            ),
+            Self::Geometry(err) => write!(f, "{err}"),
+        }
+    }
+}
+
+impl std::error::Error for PatternError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::Geometry(err) => Some(err),
+            Self::InvalidSeamAllowance { .. } => None,
+        }
+    }
+}
+
+impl From<GeometryError> for PatternError {
+    fn from(err: GeometryError) -> Self {
+        Self::Geometry(err)
+    }
+}
 
 /// A single named measurement (e.g. "bust", "waist"), stored in millimeters.
 #[derive(Debug, Clone, PartialEq)]
@@ -24,7 +66,7 @@ pub struct Measurement {
 pub struct PatternPiece {
     pub name: String,
     pub boundary: PatternBoundary,
-    pub seam_allowance_mm: f64,
+    seam_allowance_mm: f64,
     pub material: Option<Material>,
 }
 
@@ -42,14 +84,31 @@ impl PatternPiece {
         }
     }
 
+    pub fn seam_allowance_mm(&self) -> f64 {
+        self.seam_allowance_mm
+    }
+
+    /// Sets the seam allowance, rejecting values that cannot describe cloth.
+    ///
+    /// The field is private precisely so this check cannot be bypassed: an
+    /// unvalidated allowance is the difference between a garment that fits
+    /// and one cut nine times too large.
+    pub fn set_seam_allowance_mm(&mut self, value_mm: f64) -> Result<(), PatternError> {
+        if !value_mm.is_finite() || value_mm < 0.0 {
+            return Err(PatternError::InvalidSeamAllowance { value_mm });
+        }
+        self.seam_allowance_mm = value_mm;
+        Ok(())
+    }
+
     /// The outline including seam allowance — what actually gets cut.
-    pub fn cut_boundary(&self) -> PatternBoundary {
-        self.boundary.offset(self.seam_allowance_mm)
+    pub fn cut_boundary(&self) -> Result<PatternBoundary, PatternError> {
+        Ok(self.boundary.offset(self.seam_allowance_mm)?)
     }
 }
 
 /// A garment project: its pieces and the body measurements driving them.
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct Project {
     pub name: String,
     pub pieces: Vec<PatternPiece>,
@@ -108,13 +167,46 @@ mod tests {
             Point2::new(side, side),
             Point2::new(0.0, side),
         ])
+        .expect("square is a valid boundary")
     }
 
     #[test]
     fn piece_has_default_seam_allowance() {
         let piece = PatternPiece::new("Front Bodice", square_boundary(200.0));
-        assert_eq!(piece.seam_allowance_mm, 10.0);
-        assert!(piece.cut_boundary().perimeter() > piece.boundary.perimeter());
+        assert_eq!(piece.seam_allowance_mm(), 10.0);
+        let cut = piece.cut_boundary().expect("cuts cleanly");
+        assert!(cut.perimeter() > piece.boundary.perimeter());
+    }
+
+    #[test]
+    fn negative_seam_allowance_is_rejected() {
+        let mut piece = PatternPiece::new("Front Bodice", square_boundary(200.0));
+        let err = piece.set_seam_allowance_mm(-1000.0).unwrap_err();
+        assert_eq!(
+            err,
+            PatternError::InvalidSeamAllowance { value_mm: -1000.0 }
+        );
+        // The rejected value must not have landed.
+        assert_eq!(piece.seam_allowance_mm(), 10.0);
+    }
+
+    #[test]
+    fn non_finite_seam_allowance_is_rejected() {
+        let mut piece = PatternPiece::new("Front Bodice", square_boundary(200.0));
+        assert!(piece.set_seam_allowance_mm(f64::NAN).is_err());
+        assert!(piece.set_seam_allowance_mm(f64::INFINITY).is_err());
+        assert_eq!(piece.seam_allowance_mm(), 10.0);
+    }
+
+    #[test]
+    fn valid_seam_allowance_is_accepted() {
+        let mut piece = PatternPiece::new("Front Bodice", square_boundary(200.0));
+        piece.set_seam_allowance_mm(15.0).expect("15mm is fine");
+        assert_eq!(piece.seam_allowance_mm(), 15.0);
+        assert_eq!(
+            piece.cut_boundary().expect("cuts cleanly").perimeter(),
+            square_boundary(200.0).offset(15.0).unwrap().perimeter()
+        );
     }
 
     #[test]
