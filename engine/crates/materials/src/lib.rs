@@ -143,7 +143,9 @@ mod tests {
         lib.add(silk);
 
         assert_eq!(lib.len(), 1);
-        let found = lib.find_by_name("Silk Charmeuse").expect("material present");
+        let found = lib
+            .find_by_name("Silk Charmeuse")
+            .expect("material present");
         assert_eq!(found.drape, Drape::Liquid);
         assert_eq!(found.weight_gsm, Some(60.0));
     }
@@ -169,10 +171,7 @@ mod tests {
         // these exact lowercase raw values — keeping Rust's wire form in
         // sync means a document either side writes, the other can read.
         assert_eq!(serde_json::to_string(&Drape::Stiff).unwrap(), r#""stiff""#);
-        assert_eq!(
-            serde_json::to_string(&Rigidity::Firm).unwrap(),
-            r#""firm""#
-        );
+        assert_eq!(serde_json::to_string(&Rigidity::Firm).unwrap(), r#""firm""#);
         assert_eq!(
             serde_json::from_str::<Drape>(r#""liquid""#).unwrap(),
             Drape::Liquid

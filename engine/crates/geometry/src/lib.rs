@@ -61,7 +61,10 @@ impl fmt::Display for GeometryError {
                 write!(f, "offset distance {distance_mm} is not finite")
             }
             Self::IndeterminateWinding => {
-                write!(f, "boundary encloses no area, so its winding is undetermined")
+                write!(
+                    f,
+                    "boundary encloses no area, so its winding is undetermined"
+                )
             }
             Self::OffsetCollapsed { distance_mm } => write!(
                 f,
@@ -555,8 +558,8 @@ mod tests {
 
     #[test]
     fn fewer_than_three_points_is_an_error() {
-        let err = PatternBoundary::new(vec![Point2::new(0.0, 0.0), Point2::new(50.0, 0.0)])
-            .unwrap_err();
+        let err =
+            PatternBoundary::new(vec![Point2::new(0.0, 0.0), Point2::new(50.0, 0.0)]).unwrap_err();
         assert_eq!(err, GeometryError::TooFewPoints { count: 2 });
     }
 

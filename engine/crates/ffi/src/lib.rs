@@ -91,10 +91,7 @@ pub fn boundary_perimeter(points: Vec<Point>) -> Result<f64, EngineError> {
 /// Offsets a closed polygon boundary outward by `distance_mm` — the seam
 /// allowance construction, exposed across the FFI boundary.
 #[uniffi::export]
-pub fn offset_boundary(
-    points: Vec<Point>,
-    distance_mm: f64,
-) -> Result<Vec<Point>, EngineError> {
+pub fn offset_boundary(points: Vec<Point>, distance_mm: f64) -> Result<Vec<Point>, EngineError> {
     let offset = boundary_from(points)?.offset(distance_mm)?;
     Ok(offset.into_points().into_iter().map(Into::into).collect())
 }

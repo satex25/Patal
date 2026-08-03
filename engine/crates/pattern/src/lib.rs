@@ -302,10 +302,7 @@ mod tests {
         assert_eq!(restored.name, piece.name);
         assert_eq!(restored.boundary, piece.boundary);
         assert_eq!(restored.seam_allowance_mm(), 12.5);
-        assert_eq!(
-            restored.material.as_ref().unwrap().name,
-            "Silk Charmeuse"
-        );
+        assert_eq!(restored.material.as_ref().unwrap().name, "Silk Charmeuse");
     }
 
     #[test]
