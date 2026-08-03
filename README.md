@@ -70,12 +70,23 @@ This is a foundation, not a product yet. What's real today, and what isn't:
   and nothing in `apps/native` calls into this crate yet — the seam exists
   and is tested from the Rust side, but it is not yet a working pipeline.
 - `apps/native`: a Swift package (`PatruinKit`) with hand-written Swift
-  mirrors of the engine's domain types plus a basic SwiftUI shell. Builds
-  clean via `swift build`; `swift test` needs full Xcode for `XCTest` and
-  cannot run in this environment (only Command Line Tools are present) —
-  see `apps/native/README.md` for the one-time Xcode project setup. This is
-  a second, independent implementation of the domain model, not a binding
-  to the first — see the note on that below.
+  mirrors of the engine's domain types plus a basic SwiftUI shell. As of
+  this port, `PatternBoundary.offset` and `PatternPiece`'s validated seam
+  allowance are ported line-for-line from the Rust engine — same mitre
+  limit, same bevel-join and self-intersection checks, same errors thrown
+  instead of a wrong-looking number — so all three Apple platforms can now
+  compute a real seam allowance, not just Windows. `PatternBoundary` also
+  gained hand-written `Codable` matching the Rust engine's JSON wire shape
+  (a bare point array) exactly. Builds clean via `swift build`; `swift
+  test` needs full Xcode for `XCTest` and cannot run in this environment
+  (only Command Line Tools are present), so the port was instead verified
+  by running every one of the Rust engine's own numeric test cases —
+  including the specific inputs that used to corrupt the old kernel —
+  through a throwaway executable and confirming the outputs match to six
+  decimal places; see `apps/native/README.md` for the Xcode project setup
+  needed to actually run `swift test` here. This is still a second,
+  independent implementation of the domain model, not a binding to the
+  first — see the note on that below.
 - `apps/desktop`: a Tauri app whose Rust backend links `patruin-geometry`
   and `patruin-pattern` directly (no FFI boundary — both are Rust) and
   exposes one command, `engine_demo_perimeter_mm`, that a Tailwind-styled
@@ -84,12 +95,16 @@ This is a foundation, not a product yet. What's real today, and what isn't:
   not yet exercise the engine's harder paths (offset, validation failures).
 
 **The Swift mirror is duplicated, not derived, and that is real architectural
-debt.** `PatruinKit`'s types are hand-written to look like the Rust engine's,
-not generated from it, so the two can drift — and today they do: the Swift
-`PatternBoundary` has no `offset`, so iPhone, iPad, and Mac cannot compute a
-seam allowance at all, only Windows (via the Rust-linked Tauri app) can. The
-long-term fix is wiring `apps/native` to the real engine through uniffi, not
-maintaining two implementations in parallel; that work has not started.
+debt — narrower now, but not closed.** `PatruinKit`'s types are hand-written
+to look like the Rust engine's, not generated from it, so the two can still
+drift out of sync on the next change to either side; porting `offset` by
+hand fixed today's gap but didn't fix the mechanism that created it. The
+identity model has also diverged and stayed diverged: Swift's `PatternPiece`
+and `Project` carry a `UUID` that Rust's types have no counterpart for, so
+`PatternPiece`'s `Codable` conformance is Swift-to-Swift only — it does not
+yet match the Rust engine's wire format the way `PatternBoundary`'s does.
+The long-term fix is wiring `apps/native` to the real engine through uniffi,
+not maintaining two implementations in parallel; that work has not started.
 
 What's deliberately not started: the parametric propagation/constraint
 solver (patterns as "a living system" where edits propagate), a

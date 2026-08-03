@@ -45,7 +45,32 @@ and to run on the iOS Simulator or physical devices. To wire it up:
 `PatruinKit`'s models (`Point2`, `PatternBoundary`, `Material`,
 `PatternPiece`, `Project`) are hand-written Swift mirrors of the Rust engine
 types in `../../engine`. They exist so the UI has something real to build
-against today. The next milestone is replacing them with the uniffi-generated
-Swift bindings from `patruin-ffi`, packaged as an XCFramework — at that point
-these files collapse into thin view-model wrappers around the generated
-types instead of parallel implementations.
+against today. `PatternBoundary.offset` and `PatternPiece`'s seam-allowance
+validation are ported from the Rust engine's implementation directly — same
+mitre limit, same bevel joins, same self-intersection and winding checks,
+same errors thrown instead of a wrong-looking number — so this is no longer
+a thin display-only mirror.
+
+That does not make it a binding. It is still a second, hand-maintained
+implementation that can drift from the Rust engine on the next change to
+either side, and `PatternPiece`/`Project` still carry a `UUID` that Rust's
+types have no counterpart for, so `PatternPiece`'s JSON shape is
+Swift-to-Swift only (unlike `PatternBoundary`'s, which matches the Rust
+engine's wire format exactly). The next milestone is still replacing all of
+this with the uniffi-generated Swift bindings from `patruin-ffi`, packaged
+as an XCFramework — at that point these files collapse into thin
+view-model wrappers around the generated types instead of parallel
+implementations.
+
+**A note on how the offset port was verified in this environment:** `swift
+test` needs full Xcode for `XCTest`, which isn't installed here (see above).
+The XCTest cases in `Tests/PatruinKitTests` are written but couldn't be
+executed locally as a result. Instead, every one of the Rust engine's own
+numeric test cases — including the exact inputs that used to corrupt the
+old Rust kernel with NaN, fling a vertex hundreds of millimetres off a
+piece, or silently invert a winding — was ported into a throwaway
+executable target, run with `swift run`, and checked against the Rust
+engine's own output to six decimal places. All matched. The throwaway
+target was then deleted; it never touched `Package.swift` in the committed
+state. Once Xcode is installed, `swift test` should be run for real before
+trusting this note over the actual test suite.
