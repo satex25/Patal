@@ -17,7 +17,7 @@ and to run on the iOS Simulator or physical devices. To wire it up:
 
 1. Install Xcode from the App Store, then run it once so it finishes
    installing its additional components.
-2. `File > New > Project > App`, product name **Pātāl**, interface
+2. `File > New > Project > App`, product name **Patal**, interface
    **SwiftUI**, targeting iOS, and check "Mac" under the destination
    platforms (a SwiftUI multiplatform app — not Mac Catalyst).
 3. Save it inside `apps/native/` alongside this `Package.swift`.

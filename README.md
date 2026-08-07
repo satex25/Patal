@@ -3,7 +3,7 @@
 Pātāl (पाताल) — in Hindu cosmology, the netherworld: one of the seven realms
 beneath the earth, vast and richly structured, built downward from a surface
 few ever see. Formerly named *Patruin* (Irish "patrún," pattern); renamed
-2026-08-07 — see `01 Architecture/Decisions/ADR-002 Naming Convention.md`.
+2026-08-07 — see ADR-002 (Naming Convention) in the project vault.
 
 A professional garment pattern creation platform: from idea to production-ready pattern in
 one workspace, across iPhone, iPad, Mac, and Windows.
@@ -62,7 +62,7 @@ This is a foundation, not a product yet. What's real today, and what isn't:
   typed `GeometryError` rather than a plausible-looking wrong number — there
   is no silent corruption path left in this crate. `PatternPiece` and
   `Project` sit on top with the same discipline: `seam_allowance_mm` is
-  validated, not a bare public field. 33 unit tests passing
+  validated, not a bare public field. 47 unit tests passing
   (`cargo test --workspace` inside `engine/`), `cargo clippy --workspace
   --all-targets -- -D warnings` clean.
 - `patal-ffi`: exports the engine's fallible boundary operations
@@ -80,7 +80,9 @@ This is a foundation, not a product yet. What's real today, and what isn't:
   instead of a wrong-looking number — so all three Apple platforms can now
   compute a real seam allowance, not just Windows. `PatternBoundary` also
   gained hand-written `Codable` matching the Rust engine's JSON wire shape
-  (a bare point array) exactly. Builds clean via `swift build`; `swift
+  (a bare point array) exactly. Built clean via `swift build` before this
+  rename; not re-verified since (no Swift toolchain in this environment —
+  see the note on Task 3's rename in this README's history). `swift
   test` needs full Xcode for `XCTest` and cannot run in this environment
   (only Command Line Tools are present), so the port was instead verified
   by running every one of the Rust engine's own numeric test cases —

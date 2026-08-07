@@ -20,7 +20,7 @@ platform is built on and the layered, structured nature of garment
 engineering itself.
 
 Formerly named *Patruin* (Irish "patrún," pattern) — renamed 2026-08-07; see
-`01 Architecture/Decisions/ADR-002 Naming Convention.md` for the naming rules
+ADR-002 (Naming Convention) in the project vault for the naming rules
 this document now follows (`Pātāl` in prose, `Patal` in code/identifiers).
 
 ## Mission
