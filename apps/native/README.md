@@ -1,6 +1,6 @@
-# Patruin — Native App (iPhone, iPad, Mac)
+# Pātāl — Native App (iPhone, iPad, Mac)
 
-`PatruinKit` is a Swift package holding the shared models and SwiftUI views
+`PatalKit` is a Swift package holding the shared models and SwiftUI views
 used across iPhone, iPad, and Mac — one native codebase for all three, per
 the memorandum's platform goals.
 
@@ -17,21 +17,21 @@ and to run on the iOS Simulator or physical devices. To wire it up:
 
 1. Install Xcode from the App Store, then run it once so it finishes
    installing its additional components.
-2. `File > New > Project > App`, product name **Patruin**, interface
+2. `File > New > Project > App`, product name **Pātāl**, interface
    **SwiftUI**, targeting iOS, and check "Mac" under the destination
    platforms (a SwiftUI multiplatform app — not Mac Catalyst).
 3. Save it inside `apps/native/` alongside this `Package.swift`.
 4. Add this directory as a local Swift package dependency
    (`File > Add Package Dependencies > Add Local...`, select
-   `apps/native`), and link `PatruinKit` to the app target.
+   `apps/native`), and link `PatalKit` to the app target.
 5. Replace the generated `ContentView` with:
 
    ```swift
    import SwiftUI
-   import PatruinKit
+   import PatalKit
 
    @main
-   struct PatruinApp: App {
+   struct PatalApp: App {
        var body: some Scene {
            WindowGroup {
                ContentView()
@@ -42,7 +42,7 @@ and to run on the iOS Simulator or physical devices. To wire it up:
 
 ## Current state
 
-`PatruinKit`'s models (`Point2`, `PatternBoundary`, `Material`,
+`PatalKit`'s models (`Point2`, `PatternBoundary`, `Material`,
 `PatternPiece`, `Project`) are hand-written Swift mirrors of the Rust engine
 types in `../../engine`. They exist so the UI has something real to build
 against today. `PatternBoundary.offset` and `PatternPiece`'s seam-allowance
@@ -57,14 +57,14 @@ either side, and `PatternPiece`/`Project` still carry a `UUID` that Rust's
 types have no counterpart for, so `PatternPiece`'s JSON shape is
 Swift-to-Swift only (unlike `PatternBoundary`'s, which matches the Rust
 engine's wire format exactly). The next milestone is still replacing all of
-this with the uniffi-generated Swift bindings from `patruin-ffi`, packaged
+this with the uniffi-generated Swift bindings from `patal-ffi`, packaged
 as an XCFramework — at that point these files collapse into thin
 view-model wrappers around the generated types instead of parallel
 implementations.
 
 **A note on how the offset port was verified in this environment:** `swift
 test` needs full Xcode for `XCTest`, which isn't installed here (see above).
-The XCTest cases in `Tests/PatruinKitTests` are written but couldn't be
+The XCTest cases in `Tests/PatalKitTests` are written but couldn't be
 executed locally as a result. Instead, every one of the Rust engine's own
 numeric test cases — including the exact inputs that used to corrupt the
 old Rust kernel with NaN, fling a vertex hundreds of millimetres off a

@@ -1,7 +1,7 @@
 import Foundation
 
 /// Everything that can go wrong assembling a pattern piece.
-/// Mirrors `patruin_pattern::PatternError`.
+/// Mirrors `patal_pattern::PatternError`.
 public enum PatternError: Error, Equatable, Sendable {
     /// A seam allowance must be a finite, non-negative number of
     /// millimeters. A negative one doesn't trim the piece — it drives the
@@ -23,7 +23,7 @@ extension PatternError: LocalizedError {
     }
 }
 
-/// One cuttable piece of a garment, mirroring `patruin_pattern::PatternPiece`.
+/// One cuttable piece of a garment, mirroring `patal_pattern::PatternPiece`.
 ///
 /// `seamAllowanceMM` is a private store behind a validating setter, not a
 /// bare `var`, for the same reason the Rust engine's field is private: an
@@ -109,7 +109,7 @@ extension PatternPiece: Codable {
     }
 }
 
-/// A garment project: its pieces, mirroring `patruin_pattern::Project`.
+/// A garment project: its pieces, mirroring `patal_pattern::Project`.
 public struct Project: Identifiable, Equatable, Codable, Sendable {
     public var id: UUID
     public var name: String

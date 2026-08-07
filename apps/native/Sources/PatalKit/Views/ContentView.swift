@@ -30,7 +30,7 @@ public struct ContentView: View {
                     }
                 }
             }
-            .navigationTitle("Patruin")
+            .navigationTitle("Pātāl")
             .toolbar {
                 ToolbarItem(placement: .primaryAction) {
                     Button(action: addPlaceholderProject) {

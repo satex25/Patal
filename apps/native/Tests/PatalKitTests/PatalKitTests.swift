@@ -1,7 +1,7 @@
 import XCTest
-@testable import PatruinKit
+@testable import PatalKit
 
-final class PatruinKitTests: XCTestCase {
+final class PatalKitTests: XCTestCase {
     private func squareBoundary(side: Double) throws -> PatternBoundary {
         try PatternBoundary(points: [
             Point2(x: 0, y: 0),

@@ -10,7 +10,7 @@ public enum Rigidity: String, Codable, CaseIterable, Sendable {
     case soft, medium, firm, rigid
 }
 
-/// A single material definition, mirroring `patruin_materials::Material`.
+/// A single material definition, mirroring `patal_materials::Material`.
 public struct Material: Identifiable, Equatable, Codable, Sendable {
     public var id: UUID
     public var name: String

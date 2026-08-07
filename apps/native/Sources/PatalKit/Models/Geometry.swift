@@ -2,7 +2,7 @@ import Foundation
 
 /// A point in pattern space, in millimeters.
 ///
-/// This mirrors `patruin_geometry::Point2` in the Rust engine. It is a
+/// This mirrors `patal_geometry::Point2` in the Rust engine. It is a
 /// hand-written interim model — once the engine is linked in as an
 /// XCFramework, the UI layer will talk to the generated uniffi types
 /// directly and this file's role narrows to view-model conveniences.
@@ -30,7 +30,7 @@ public struct Point2: Equatable, Codable, Hashable, Sendable {
 
 /// Everything that can go wrong building or offsetting a `PatternBoundary`.
 ///
-/// Mirrors `patruin_geometry::GeometryError` in the Rust engine variant for
+/// Mirrors `patal_geometry::GeometryError` in the Rust engine variant for
 /// variant — see that type's doc comments for why each one exists. Kept in
 /// sync by hand because this whole file is a hand-written mirror, not a
 /// binding; see the architecture note in the top-level README.
@@ -66,7 +66,7 @@ extension GeometryError: LocalizedError {
 }
 
 /// Which way a boundary is wound, or that the question has no answer.
-/// Mirrors `patruin_geometry::Winding`.
+/// Mirrors `patal_geometry::Winding`.
 public enum Winding: Equatable, Sendable {
     case counterClockwise
     case clockwise
@@ -77,7 +77,7 @@ public enum Winding: Equatable, Sendable {
 
 /// The closed outline of a pattern piece, as a straight-edged polygon.
 ///
-/// Mirrors `patruin_geometry::PatternBoundary`, including its invariant:
+/// Mirrors `patal_geometry::PatternBoundary`, including its invariant:
 /// construction is the only way in, so every `PatternBoundary` in existence
 /// has at least 3 points, all finite, with no two consecutive points equal.
 /// `points` is a private store behind a read-only accessor for the same
@@ -90,7 +90,7 @@ public enum Winding: Equatable, Sendable {
 /// collapsed or crossing result is a thrown `GeometryError`, never a
 /// polygon that merely looks plausible. Until this file is deleted in
 /// favor of the real uniffi bindings, this is the seam-allowance math for
-/// three of Patruin's four target platforms — see the README.
+/// three of Pātāl's four target platforms — see the README.
 public struct PatternBoundary: Equatable, Sendable {
     private var storedPoints: [Point2]
 

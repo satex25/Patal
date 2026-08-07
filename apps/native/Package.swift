@@ -2,16 +2,16 @@
 import PackageDescription
 
 let package = Package(
-    name: "Patruin",
+    name: "Patal",
     platforms: [
         .iOS(.v17),
         .macOS(.v14),
     ],
     products: [
-        .library(name: "PatruinKit", targets: ["PatruinKit"]),
+        .library(name: "PatalKit", targets: ["PatalKit"]),
     ],
     targets: [
-        .target(name: "PatruinKit"),
-        .testTarget(name: "PatruinKitTests", dependencies: ["PatruinKit"]),
+        .target(name: "PatalKit"),
+        .testTarget(name: "PatalKitTests", dependencies: ["PatalKit"]),
     ]
 )
