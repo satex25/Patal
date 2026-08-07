@@ -7,13 +7,21 @@
 
 ## Project Name
 
-Patruin
+Pātāl
 
-Patrúin (plural of patrún) is the modern Irish word for patterns. The name
-represents far more than sewing patterns—it embodies the idea of a blueprint,
-a design language, a model for creation, and the foundation from which new
-ideas emerge. It reflects both centuries of craftsmanship and the limitless
-possibilities of future innovation.
+Pātāl (पाताल) is the netherworld of Hindu cosmology — one of seven realms
+built downward beneath the visible earth, each with its own depth and
+structure. The name represents far more than a play on "pattern"—it embodies
+the idea of a workspace built in layers, with real structure beneath what a
+designer first sees on the surface: an idea becomes a silhouette, a
+silhouette becomes construction geometry, construction geometry becomes a
+production-ready pattern. It reflects both the depth of craftsmanship the
+platform is built on and the layered, structured nature of garment
+engineering itself.
+
+Formerly named *Patruin* (Irish "patrún," pattern) — renamed 2026-08-07; see
+`01 Architecture/Decisions/ADR-002 Naming Convention.md` for the naming rules
+this document now follows (`Pātāl` in prose, `Patal` in code/identifiers).
 
 ## Mission
 
