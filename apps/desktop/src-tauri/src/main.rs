@@ -2,5 +2,5 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 fn main() {
-    patruin_desktop_lib::run()
+    patal_desktop_lib::run()
 }

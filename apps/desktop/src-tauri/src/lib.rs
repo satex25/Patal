@@ -1,5 +1,5 @@
-use patruin_geometry::{PatternBoundary, Point2};
-use patruin_pattern::{PatternPiece, Project};
+use patal_geometry::{PatternBoundary, Point2};
+use patal_pattern::{PatternPiece, Project};
 
 /// Proves the desktop app talks to the same engine crates as everything
 /// else — this is a placeholder call until the UI builds real projects.

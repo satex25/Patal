@@ -10,9 +10,9 @@ checksum = "320119579fcad9c21884f5c4861d16174d0e06250625266f50fe6898340abefa"
 
 [[package]]
 name = "aho-corasick"
-version = "1.1.4"
+version = "1.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ddd31a130427c27518df266943a5308ed92d4b226cc639f5a8f1002816174301"
+checksum = "c982642fa9e8606056828ee9a8505737230110bb1099153c79efe865c59d12ba"
 dependencies = [
  "memchr",
 ]
@@ -34,9 +34,9 @@ dependencies = [
 
 [[package]]
 name = "android_system_properties"
-version = "0.1.5"
+version = "0.1.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "819e7219dbd41043ac279b19830f2efc897156490d7fd6ea916720117ee66311"
+checksum = "ae221649c9976a6f6c56ae1facf410f3ddb33cc661c4b7b61020a912d4237fbc"
 dependencies = [
  "libc",
 ]
@@ -268,9 +268,9 @@ dependencies = [
 
 [[package]]
 name = "cc"
-version = "1.4.0"
+version = "1.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5add81bb678e6cb321aff7fa0dc7689ad82b112dbc032cea19f91d6b8e3582b9"
+checksum = "9066c49992464636f92905fa096ec58baaa4d57ec19a5c096c68d3e25ef3d136"
 dependencies = [
  "find-msvc-tools",
  "shlex",
@@ -745,9 +745,9 @@ dependencies = [
 
 [[package]]
 name = "find-msvc-tools"
-version = "0.1.9"
+version = "0.1.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5baebc0774151f905a1a2cc41989300b1e6fbb29aff0ceffa1064fdd3088d582"
+checksum = "26b73573e6edcd2af0cdf47bd6cb58f0b3839491263c314eaad1ccf24430e1de"
 
 [[package]]
 name = "flate2"
@@ -2065,11 +2065,11 @@ dependencies = [
 ]
 
 [[package]]
-name = "patruin-desktop"
+name = "patal-desktop"
 version = "0.1.0"
 dependencies = [
- "patruin-geometry",
- "patruin-pattern",
+ "patal-geometry",
+ "patal-pattern",
  "serde",
  "serde_json",
  "tauri",
@@ -2077,25 +2077,25 @@ dependencies = [
 ]
 
 [[package]]
-name = "patruin-geometry"
+name = "patal-geometry"
 version = "0.1.0"
 dependencies = [
  "serde",
 ]
 
 [[package]]
-name = "patruin-materials"
+name = "patal-materials"
 version = "0.1.0"
 dependencies = [
  "serde",
 ]
 
 [[package]]
-name = "patruin-pattern"
+name = "patal-pattern"
 version = "0.1.0"
 dependencies = [
- "patruin-geometry",
- "patruin-materials",
+ "patal-geometry",
+ "patal-materials",
  "serde",
 ]
 
@@ -2382,9 +2382,9 @@ dependencies = [
 
 [[package]]
 name = "regex-automata"
-version = "0.4.16"
+version = "0.4.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8fcfdb36bda0c880c5931cdc7a2bcdc8ba4556847b9d912bca70bc94708711ad"
+checksum = "ad8553b9b26413251cbf30e620595c7a41b3887f03da04579c0e6b0d6a06b4b2"
 dependencies = [
  "aho-corasick",
  "memchr",

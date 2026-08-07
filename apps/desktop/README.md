@@ -1,4 +1,4 @@
-# Patruin — Desktop (Windows / Mac downloadable build)
+# Pātāl — Desktop (Windows / Mac downloadable build)
 
 Tauri app: Rust backend (`src-tauri/`, linking the shared engine crates in
 `../../engine` directly as path dependencies) + a Tailwind-styled web
@@ -23,6 +23,6 @@ npm run tauri build   # produce a distributable installer
 
 `index.html` / `src/main.ts` are a placeholder screen with one button that
 calls the `engine_demo_perimeter_mm` Tauri command (`src-tauri/src/lib.rs`),
-which builds a `Project` from `patruin-pattern` and returns its perimeter —
+which builds a `Project` from `patal-pattern` and returns its perimeter —
 proof the desktop shell is wired to the real engine, not real product UI
 yet.
