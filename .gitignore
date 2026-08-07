@@ -20,3 +20,6 @@ DerivedData/
 # Editors
 .vscode/
 .idea/
+
+# Local worktrees
+.worktrees/
