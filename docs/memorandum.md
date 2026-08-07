@@ -1,6 +1,6 @@
-# Patruin — Project Memorandum v1.0
+# Pātāl — Project Memorandum v1.0
 
-> This is the founding document for Patruin. It is a statement of intent, not a
+> This is the founding document for Pātāl. It is a statement of intent, not a
 > spec — architecture and feature decisions throughout this repo should trace
 > back to the principles below. See `README.md` for how these pillars map to
 > the actual codebase.
@@ -28,7 +28,7 @@ this document now follows (`Pātāl` in prose, `Patal` in code/identifiers).
 Create the world's most intuitive professional garment pattern creation
 platform.
 
-Patruin exists to transform imagination into production-ready design through
+Pātāl exists to transform imagination into production-ready design through
 a creative environment where ideas are explored, engineered, refined, and
 realized without sacrificing precision, craftsmanship, or accessibility.
 
@@ -37,13 +37,13 @@ construction while maintaining complete creative freedom.
 
 ## Vision
 
-Patruin is building the next generation of fashion design technology.
+Pātāl is building the next generation of fashion design technology.
 
 The platform serves as a creative workspace where ideas become tangible,
 manufacturable garments through intelligent design tools, advanced pattern
 engineering, and a modern user experience.
 
-Rather than beginning with predefined expectations, Patruin begins with
+Rather than beginning with predefined expectations, Pātāl begins with
 imagination.
 
 Every project starts as an idea.
@@ -51,13 +51,13 @@ Every project starts as an idea.
 That idea is then developed into a complete system of construction, geometry,
 materials, measurements, and production-ready patterns.
 
-Patruin aims to become the global standard creative platform for garment
+Pātāl aims to become the global standard creative platform for garment
 innovation by making sophisticated design accessible while providing the
 precision required by professionals.
 
 ## Core Philosophy
 
-Patruin is built on the belief that every great garment begins as an idea.
+Pātāl is built on the belief that every great garment begins as an idea.
 
 The platform exists to remove friction between imagination and creation.
 
@@ -72,7 +72,7 @@ Technology exists to amplify creativity—not interrupt it.
 
 ## Product Purpose
 
-Patruin is a comprehensive garment creation platform capable of supporting the
+Pātāl is a comprehensive garment creation platform capable of supporting the
 complete design lifecycle.
 
 Within a single environment, creators can:
@@ -92,7 +92,7 @@ reversible throughout the design process.
 
 ## Creative Philosophy
 
-Patruin encourages invention.
+Pātāl encourages invention.
 
 Design is approached as an evolving creative process where geometry,
 proportion, construction, material selection, functionality, and aesthetics
@@ -139,7 +139,7 @@ manufacturers.
 
 ## Pattern Engine
 
-At the heart of Patruin is a universal pattern generation engine.
+At the heart of Pātāl is a universal pattern generation engine.
 
 The engine converts creative intent into mathematically accurate construction
 geometry.
@@ -161,7 +161,7 @@ The engine should prioritize:
 
 ## Design Environment
 
-Patruin should provide a workspace that feels modern, elegant, and
+Pātāl should provide a workspace that feels modern, elegant, and
 approachable.
 
 The interface should encourage creativity through clarity rather than
@@ -183,7 +183,7 @@ Every interaction should reinforce confidence and creative momentum.
 
 ## Intelligence
 
-Intelligence within Patruin functions as a collaborative design partner.
+Intelligence within Pātāl functions as a collaborative design partner.
 
 It assists creators by helping organize ideas, generate construction
 approaches, explore alternatives, optimize workflows, explain techniques, and
@@ -196,7 +196,7 @@ The creator always remains the designer.
 
 ## Platform Goals
 
-Patruin is designed as a unified ecosystem across:
+Pātāl is designed as a unified ecosystem across:
 
 - iPhone
 - iPad
@@ -235,7 +235,7 @@ in the garments it helps create.
 
 ## Long-Term Objective
 
-Patruin aspires to become the definitive creative platform for garment design
+Pātāl aspires to become the definitive creative platform for garment design
 and pattern engineering.
 
 Its purpose is to empower creators to design, develop, and manufacture
@@ -243,18 +243,18 @@ garments with unprecedented freedom while preserving the precision demanded
 by professional production.
 
 By combining intelligent software, advanced engineering, thoughtful design,
-and an uncompromising user experience, Patruin seeks to elevate the creative
+and an uncompromising user experience, Pātāl seeks to elevate the creative
 process itself and help shape the future of fashion.
 
 ## Development Principle
 
-Every feature introduced into Patruin must answer one question:
+Every feature introduced into Pātāl must answer one question:
 
 > Does this make it easier for someone to transform an idea into a
 > beautifully engineered, production-ready garment while expanding their
 > creative possibilities?
 
-If the answer is yes, it belongs in Patruin.
+If the answer is yes, it belongs in Pātāl.
 
 ---
 
