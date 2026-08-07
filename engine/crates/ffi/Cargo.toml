@@ -1,5 +1,5 @@
 [package]
-name = "patruin-ffi"
+name = "patal-ffi"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -10,9 +10,9 @@ publish.workspace = true
 crate-type = ["lib", "cdylib", "staticlib"]
 
 [dependencies]
-patruin-geometry = { path = "../geometry" }
-patruin-materials = { path = "../materials" }
-patruin-pattern = { path = "../pattern" }
+patal-geometry = { path = "../geometry" }
+patal-materials = { path = "../materials" }
+patal-pattern = { path = "../pattern" }
 uniffi = "0.28"
 
 [[bin]]

@@ -12,8 +12,8 @@
 
 use std::fmt;
 
-use patruin_geometry::{GeometryError, PatternBoundary};
-use patruin_materials::Material;
+use patal_geometry::{GeometryError, PatternBoundary};
+use patal_materials::Material;
 use serde::{Deserialize, Serialize};
 
 /// Everything that can go wrong assembling a pattern.
@@ -68,7 +68,7 @@ pub struct Measurement {
 /// `PatternBoundary` goes through a plain `Vec<Point2>`: the wire format is
 /// the natural shape, but arriving values are re-validated by
 /// [`PatternPiece::set_seam_allowance_mm`] rather than assigned directly —
-/// a `.patruin` file edited by hand, or written by a future version with a
+/// a `.patal` file edited by hand, or written by a future version with a
 /// looser rule, cannot load a piece with a seam allowance that would
 /// silently invert the cut line the way the old bare `pub f64` did.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -203,8 +203,8 @@ impl Project {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use patruin_geometry::Point2;
-    use patruin_materials::Material;
+    use patal_geometry::Point2;
+    use patal_materials::Material;
 
     fn square_boundary(side: f64) -> PatternBoundary {
         PatternBoundary::new(vec![
@@ -308,7 +308,7 @@ mod tests {
     #[test]
     fn deserializing_negative_seam_allowance_is_rejected() {
         // The bare pub f64 this used to be let a hand-edited or corrupted
-        // .patruin file load a piece that would cut nine times too large,
+        // .patal file load a piece that would cut nine times too large,
         // silently. Loading one now fails instead.
         let json = r#"{
             "name": "Front Bodice",

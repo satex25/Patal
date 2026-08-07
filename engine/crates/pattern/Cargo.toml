@@ -1,5 +1,5 @@
 [package]
-name = "patruin-pattern"
+name = "patal-pattern"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -7,8 +7,8 @@ authors.workspace = true
 publish.workspace = true
 
 [dependencies]
-patruin-geometry = { path = "../geometry" }
-patruin-materials = { path = "../materials" }
+patal-geometry = { path = "../geometry" }
+patal-materials = { path = "../materials" }
 serde = { workspace = true }
 
 [dev-dependencies]

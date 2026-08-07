@@ -1,5 +1,5 @@
 [package]
-name = "patruin-materials"
+name = "patal-materials"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

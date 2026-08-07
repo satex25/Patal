@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 /// just a visual one (drape affects seam placement, ease, and silhouette).
 ///
 /// `rename_all = "snake_case"` gives Rust's `Stiff` the wire form `"stiff"`
-/// — matching PatruinKit's Swift `Drape` raw values exactly, so a JSON
+/// — matching PatalKit's Swift `Drape` raw values exactly, so a JSON
 /// document produced by either mirror deserializes cleanly in the other.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -74,7 +74,7 @@ impl Material {
 /// `materials` is private for encapsulation, not to protect an invariant —
 /// there is none yet, so the wire format is simply the list, via
 /// `#[serde(from, into)]` rather than the fallible `try_from` that a type
-/// with a real invariant (`patruin_geometry::PatternBoundary`) needs.
+/// with a real invariant (`patal_geometry::PatternBoundary`) needs.
 #[derive(Debug, Default, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(from = "Vec<Material>", into = "Vec<Material>")]
 pub struct MaterialLibrary {
@@ -167,7 +167,7 @@ mod tests {
 
     #[test]
     fn drape_and_rigidity_serialize_lowercase_matching_the_swift_mirror() {
-        // PatruinKit's Swift `Drape`/`Rigidity` are String-backed enums with
+        // PatalKit's Swift `Drape`/`Rigidity` are String-backed enums with
         // these exact lowercase raw values — keeping Rust's wire form in
         // sync means a document either side writes, the other can read.
         assert_eq!(serde_json::to_string(&Drape::Stiff).unwrap(), r#""stiff""#);

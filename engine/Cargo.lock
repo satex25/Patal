@@ -163,9 +163,9 @@ dependencies = [
 
 [[package]]
 name = "clap"
-version = "4.6.5"
+version = "4.6.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "301b56658598e48f3648647ac6fc887be7e7108eddfa4e9b63fcf3ec58c0cadf"
+checksum = "473c7e07f409a8d772161724aa8db6a765a2532a70f9667eeb7b49d3d02fbdca"
 dependencies = [
  "clap_builder",
  "clap_derive",
@@ -173,9 +173,9 @@ dependencies = [
 
 [[package]]
 name = "clap_builder"
-version = "4.6.5"
+version = "4.6.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "94a65403d1a1bd28f7dc68eb8506e8874808ee5eecb59298de588e2e1407a078"
+checksum = "7b48fea5a88e9ae728a2dcbedbfc0e730f7d60da42e1cb049a83c9fb8b789889"
 dependencies = [
  "anstream",
  "anstyle",
@@ -314,17 +314,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "57c0d7b74b563b49d38dae00a0c37d4d6de9b432382b2892f0574ddcae73fd0a"
 
 [[package]]
-name = "patruin-ffi"
+name = "patal-ffi"
 version = "0.1.0"
 dependencies = [
- "patruin-geometry",
- "patruin-materials",
- "patruin-pattern",
+ "patal-geometry",
+ "patal-materials",
+ "patal-pattern",
  "uniffi",
 ]
 
 [[package]]
-name = "patruin-geometry"
+name = "patal-geometry"
 version = "0.1.0"
 dependencies = [
  "serde",
@@ -332,7 +332,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "patruin-materials"
+name = "patal-materials"
 version = "0.1.0"
 dependencies = [
  "serde",
@@ -340,11 +340,11 @@ dependencies = [
 ]
 
 [[package]]
-name = "patruin-pattern"
+name = "patal-pattern"
 version = "0.1.0"
 dependencies = [
- "patruin-geometry",
- "patruin-materials",
+ "patal-geometry",
+ "patal-materials",
  "serde",
  "serde_json",
 ]

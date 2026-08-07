@@ -2,7 +2,7 @@
 //! each native front end (Swift on iOS/iPad/Mac, the Tauri desktop app on
 //! Windows).
 //!
-//! Domain crates (`patruin-geometry`, `patruin-materials`, `patruin-pattern`)
+//! Domain crates (`patal-geometry`, `patal-materials`, `patal-pattern`)
 //! stay free of FFI concerns; this crate defines uniffi-friendly DTOs and
 //! converts to/from the real domain types. The exported surface here is
 //! intentionally small — it grows alongside the domain crates rather than
@@ -16,7 +16,7 @@
 
 use std::fmt;
 
-use patruin_geometry::GeometryError;
+use patal_geometry::GeometryError;
 
 uniffi::setup_scaffolding!();
 
@@ -52,27 +52,27 @@ impl From<GeometryError> for EngineError {
     }
 }
 
-/// An FFI-safe 2D point. Converts to/from `patruin_geometry::Point2`.
+/// An FFI-safe 2D point. Converts to/from `patal_geometry::Point2`.
 #[derive(uniffi::Record)]
 pub struct Point {
     pub x: f64,
     pub y: f64,
 }
 
-impl From<Point> for patruin_geometry::Point2 {
+impl From<Point> for patal_geometry::Point2 {
     fn from(p: Point) -> Self {
-        patruin_geometry::Point2::new(p.x, p.y)
+        patal_geometry::Point2::new(p.x, p.y)
     }
 }
 
-impl From<patruin_geometry::Point2> for Point {
-    fn from(p: patruin_geometry::Point2) -> Self {
+impl From<patal_geometry::Point2> for Point {
+    fn from(p: patal_geometry::Point2) -> Self {
         Point { x: p.x, y: p.y }
     }
 }
 
-fn boundary_from(points: Vec<Point>) -> Result<patruin_geometry::PatternBoundary, EngineError> {
-    Ok(patruin_geometry::PatternBoundary::new(
+fn boundary_from(points: Vec<Point>) -> Result<patal_geometry::PatternBoundary, EngineError> {
+    Ok(patal_geometry::PatternBoundary::new(
         points.into_iter().map(Into::into).collect(),
     )?)
 }
