@@ -81,9 +81,8 @@ This is a foundation, not a product yet. What's real today, and what isn't:
   compute a real seam allowance, not just Windows. `PatternBoundary` also
   gained hand-written `Codable` matching the Rust engine's JSON wire shape
   (a bare point array) exactly. Built clean via `swift build` before this
-  rename; not re-verified since (no Swift toolchain in this environment —
-  see the note on Task 3's rename in this README's history). `swift
-  test` needs full Xcode for `XCTest` and cannot run in this environment
+  rename; not re-verified since (no Swift toolchain in this environment).
+  `swift test` needs full Xcode for `XCTest` and cannot run in this environment
   (only Command Line Tools are present), so the port was instead verified
   by running every one of the Rust engine's own numeric test cases —
   including the specific inputs that used to corrupt the old kernel —
