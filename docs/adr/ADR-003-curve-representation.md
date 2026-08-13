@@ -110,6 +110,58 @@ Two things about that oracle are worth carrying forward:
   an inset and never tested a concave region — exactly the two cases where the
   argument above is not trivially true.
 
+## The derivation, worked through and corrected
+
+The tolerance argument above went into this wave resting on a single derivation with
+no second opinion — an engineering review that owed exactly that never completed. It
+has since been worked through properly and checked against the oracle. The conclusion
+holds; the constant does not.
+
+Take a locally circular region of radius `r`, flattened into chords of half-angle `φ`,
+so the sagitta is `s = r(1 − cos φ)`. Offset the resulting polygon by `d`. Its edges
+move to distance `r cos φ + d` from the centre, and its vertices land at the mitre
+intersections, `(r cos φ + d) / cos φ = r + d/cos φ`. The true offset curve is at
+`r + d`. So:
+
+| where | deviation from the true offset |
+|---|---|
+| edge midpoints | `−s` |
+| vertices | `d(1/cos φ − 1) = d·(s/r)/cos φ ≈ d·s·κ` |
+
+The worst of the two is `s · max(1, |d|·κ)`.
+
+**So the amplification factor is `max(1, |d|·κ)`, not `1 + |d|·κ`.** The structure is
+identical for a concave region — the sign of `d` swaps which direction shrinks the
+radius, exactly as argued above, but the magnitudes mirror — so this holds in all four
+combinations of curvature sign and offset direction.
+
+Two things follow.
+
+**The original claim was right where it mattered.** `1 + |d|·κ ≥ max(1, |d|·κ)`
+always, so the formula in the code is conservative in both directions, which is what
+was disputed. The specific counterclaim — that it under-tightens on insets by an
+unbounded factor — does not survive: on an inset of a convex region, `|d| < r` gives
+an amplification of exactly 1, and the code tightens anyway.
+
+**The formula is nonetheless kept as it is, deliberately.** It over-tightens by up to
+2× in the regime where `|d|·κ ≈ 1`, buying vertices that are not strictly needed. That
+is the right trade here: the derivation above assumes locally uniform chords, and
+adaptive subdivision of a cubic with varying curvature does not produce them, so the
+slack is doing real work. And it costs nothing — the whole path is about 1% of a
+120Hz frame at manufacturing tolerance. Tightening the constant would trade a measured
+non-problem for an unmeasured one.
+
+The empirical check is the oracle sweep, which passes across radii 10–1000mm, offsets
+of ±1 to ±25mm, and tolerances 0.1–0.001mm — including `R = 10, d = +25`, where
+`|d|·κ = 2.5` and the two formulas differ by 40%.
+
+**Caveat, stated because it is the one place this reasoning stops.** When `|d|·κ ≥ 1`
+in the shrinking direction, the offset radius reaches zero and the offset curve is
+degenerate — there is no correct answer to be within tolerance *of*. That case must
+fail rather than be approximated, and it does: the kernel reports
+`OffsetSelfIntersects` or `OffsetCollapsed`. Pinned by
+`an_inset_past_the_radius_fails_loudly`.
+
 ## Consequence this layer owns, and has not solved
 
 **Flattening finely enough for accuracy can make a shape un-offsettable.**

@@ -275,6 +275,13 @@ impl SeamPath {
     /// the circle oracle in this module's tests, which asserts the result
     /// against a closed-form answer across convex, concave, outset and
     /// inset.
+    ///
+    /// The tight factor is actually `max(1, |d|·κ)` rather than `1 + |d|·κ`
+    /// — worked through in `docs/adr/ADR-003-curve-representation.md` — so
+    /// this over-tightens by up to 2x near `|d|·κ ≈ 1`. Kept deliberately:
+    /// the derivation assumes locally uniform chords, adaptive subdivision
+    /// of a varying-curvature cubic does not produce them, and the slack
+    /// costs about 1% of a 120Hz frame.
     pub fn flatten_for_offset(
         &self,
         tolerance_mm: f64,
