@@ -27,4 +27,5 @@ serde_json = "1"
 patal-geometry = { path = "../../../engine/crates/geometry" }
 patal-materials = { path = "../../../engine/crates/materials" }
 patal-pattern = { path = "../../../engine/crates/pattern" }
+patal-export = { path = "../../../engine/crates/export" }
 

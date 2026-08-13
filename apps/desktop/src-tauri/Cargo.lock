@@ -2068,6 +2068,7 @@ dependencies = [
 name = "patal-desktop"
 version = "0.1.0"
 dependencies = [
+ "patal-export",
  "patal-geometry",
  "patal-materials",
  "patal-pattern",
@@ -2075,6 +2076,14 @@ dependencies = [
  "serde_json",
  "tauri",
  "tauri-build",
+]
+
+[[package]]
+name = "patal-export"
+version = "0.1.0"
+dependencies = [
+ "patal-geometry",
+ "patal-pattern",
 ]
 
 [[package]]

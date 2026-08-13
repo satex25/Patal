@@ -1,0 +1,385 @@
+%PDF-1.7
+%‚„œ”
+% Written by Patal. True scale: 1mm in the model is 1mm on paper.
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [4 0 R 6 0 R 8 0 R 10 0 R 12 0 R] /Count 5 >>
+endobj
+3 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>
+endobj
+4 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595.2756 841.8898] /Resources << /Font << /F1 3 0 R >> >> /Contents 5 0 R >>
+endobj
+5 0 obj
+<< /Length 1325 >>
+stream
+% patal-calibration-page
+0 G
+0.25 w
+BT /F1 14 Tf 28.3465 796.5354 Td (Patal - true-scale check) Tj ET
+BT /F1 9 Tf 28.3465 780.9449 Td (Print at 100%. Turn off 'fit to page', 'shrink oversized pages' and any scaling.) Tj ET
+BT /F1 9 Tf 28.3465 765.3543 Td (Set the printer driver's paper size to the same size as this PDF - a Letter tray) Tj ET
+BT /F1 9 Tf 28.3465 749.7638 Td (printing an A4 document silently shrinks it by about 6%, and no scaling setting) Tj ET
+BT /F1 9 Tf 28.3465 734.1732 Td (in the print dialog will say so.) Tj ET
+BT /F1 9 Tf 28.3465 718.5827 Td (Then measure the two rules below from the corner, and the square on every sheet.) Tj ET
+39.685 39.685 m
+566.9291 39.685 l
+S
+39.685 39.685 m
+39.685 606.6142 l
+S
+566.9291 31.1811 m
+566.9291 48.189 l
+S
+31.1811 606.6142 m
+48.189 606.6142 l
+S
+39.685 31.1811 m
+39.685 48.189 l
+S
+31.1811 39.685 m
+48.189 39.685 l
+S
+BT /F1 8 Tf 48.189 48.189 Td (across the page: 186 mm from this corner to the tick) Tj ET
+BT /F1 8 Tf 53.8583 589.6063 Td (down the page: 200 mm from the corner to this tick) Tj ET
+BT /F1 8 Tf 238.1102 549.9213 Td (page 210 x 297 mm, margin 10 mm, overlap 10 mm) Tj ET
+BT /F1 8 Tf 238.1102 535.748 Td (1 piece\(s\), no nesting - one grid per piece) Tj ET
+BT /F1 8 Tf 238.1102 521.5748 Td (  Golden Panel: 2 x 2 sheets, seam allowance 12 mm) Tj ET
+endstream
+endobj
+6 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595.2756 841.8898] /Resources << /Font << /F1 3 0 R >> >> /Contents 7 0 R >>
+endobj
+7 0 obj
+<< /Length 1593 >>
+stream
+% patal-tile piece="Golden Panel" col=0 row=1 columns=2 rows=2 origin_mm=-12,197 window_mm=190,219 window_origin_mm=10,68
+q
+28.3465 192.7559 538.5827 620.7874 re W n
+0.25 w
+0.45 G
+[4 3] 0 d
+62.3622 -365.6693 m
+912.7559 -365.6693 l
+912.7559 342.9921 l
+402.5197 541.4173 l
+62.3622 342.9921 l
+h
+S
+0 G
+[] 0 d
+28.3465 -399.685 m
+946.7717 -399.685 l
+946.7717 366.2612 l
+399.5546 579.0678 l
+28.3465 362.5298 l
+h
+S
+0 G
+17.0079 192.7559 m
+39.685 192.7559 l
+S
+28.3465 181.4173 m
+28.3465 204.0945 l
+S
+BT /F1 6 Tf 31.1811 195.5906 Td (x0y1) Tj ET
+17.0079 785.1969 m
+39.685 785.1969 l
+S
+28.3465 773.8583 m
+28.3465 796.5354 l
+S
+BT /F1 6 Tf 31.1811 788.0315 Td (x0y2) Tj ET
+527.2441 192.7559 m
+549.9213 192.7559 l
+S
+538.5827 181.4173 m
+538.5827 204.0945 l
+S
+BT /F1 6 Tf 541.4173 195.5906 Td (x1y1) Tj ET
+527.2441 785.1969 m
+549.9213 785.1969 l
+S
+538.5827 773.8583 m
+538.5827 796.5354 l
+S
+BT /F1 6 Tf 541.4173 788.0315 Td (x1y2) Tj ET
+Q
+q
+0.7 G
+0.25 w
+[2 2] 0 d
+28.3465 192.7559 538.5827 620.7874 re S
+Q
+q
+0 G
+0.25 w
+[3 2] 0 d
+28.3465 28.3465 141.7323 141.7323 re S
+[] 0 d
+BT /F1 9 Tf 187.0866 158.7402 Td (50mm calibration square - DO NOT CUT) Tj ET
+BT /F1 7 Tf 187.0866 141.7323 Td (Measure it. If it is not 50mm, the print is scaled and the pattern is wrong.) Tj ET
+BT /F1 7 Tf 187.0866 124.7244 Td (Golden Panel  -  sheet 1 of 4  \(column 1 of 2, row 1 of 2\)) Tj ET
+BT /F1 7 Tf 187.0866 107.7165 Td (solid = cut line \(seam allowance 12 mm\).  dashed grey = sewing line.) Tj ET
+BT /F1 7 Tf 187.0866 90.7087 Td (Assembly: overlap the crosses, do not trim. Matching labels \(x1y0\) must coincide.) Tj ET
+Q
+endstream
+endobj
+8 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595.2756 841.8898] /Resources << /Font << /F1 3 0 R >> >> /Contents 9 0 R >>
+endobj
+9 0 obj
+<< /Length 1601 >>
+stream
+% patal-tile piece="Golden Panel" col=1 row=1 columns=2 rows=2 origin_mm=168,197 window_mm=190,219 window_origin_mm=10,68
+q
+28.3465 192.7559 538.5827 620.7874 re W n
+0.25 w
+0.45 G
+[4 3] 0 d
+-447.874 -365.6693 m
+402.5197 -365.6693 l
+402.5197 342.9921 l
+-107.7165 541.4173 l
+-447.874 342.9921 l
+h
+S
+0 G
+[] 0 d
+-481.8898 -399.685 m
+436.5354 -399.685 l
+436.5354 366.2612 l
+-110.6817 579.0678 l
+-481.8898 362.5298 l
+h
+S
+0 G
+17.0079 192.7559 m
+39.685 192.7559 l
+S
+28.3465 181.4173 m
+28.3465 204.0945 l
+S
+BT /F1 6 Tf 31.1811 195.5906 Td (x1y1) Tj ET
+17.0079 785.1969 m
+39.685 785.1969 l
+S
+28.3465 773.8583 m
+28.3465 796.5354 l
+S
+BT /F1 6 Tf 31.1811 788.0315 Td (x1y2) Tj ET
+527.2441 192.7559 m
+549.9213 192.7559 l
+S
+538.5827 181.4173 m
+538.5827 204.0945 l
+S
+BT /F1 6 Tf 541.4173 195.5906 Td (x2y1) Tj ET
+527.2441 785.1969 m
+549.9213 785.1969 l
+S
+538.5827 773.8583 m
+538.5827 796.5354 l
+S
+BT /F1 6 Tf 541.4173 788.0315 Td (x2y2) Tj ET
+Q
+q
+0.7 G
+0.25 w
+[2 2] 0 d
+28.3465 192.7559 538.5827 620.7874 re S
+Q
+q
+0 G
+0.25 w
+[3 2] 0 d
+28.3465 28.3465 141.7323 141.7323 re S
+[] 0 d
+BT /F1 9 Tf 187.0866 158.7402 Td (50mm calibration square - DO NOT CUT) Tj ET
+BT /F1 7 Tf 187.0866 141.7323 Td (Measure it. If it is not 50mm, the print is scaled and the pattern is wrong.) Tj ET
+BT /F1 7 Tf 187.0866 124.7244 Td (Golden Panel  -  sheet 2 of 4  \(column 2 of 2, row 1 of 2\)) Tj ET
+BT /F1 7 Tf 187.0866 107.7165 Td (solid = cut line \(seam allowance 12 mm\).  dashed grey = sewing line.) Tj ET
+BT /F1 7 Tf 187.0866 90.7087 Td (Assembly: overlap the crosses, do not trim. Matching labels \(x1y0\) must coincide.) Tj ET
+Q
+endstream
+endobj
+10 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595.2756 841.8898] /Resources << /Font << /F1 3 0 R >> >> /Contents 11 0 R >>
+endobj
+11 0 obj
+<< /Length 1593 >>
+stream
+% patal-tile piece="Golden Panel" col=0 row=0 columns=2 rows=2 origin_mm=-12,-12 window_mm=190,219 window_origin_mm=10,68
+q
+28.3465 192.7559 538.5827 620.7874 re W n
+0.25 w
+0.45 G
+[4 3] 0 d
+62.3622 226.7717 m
+912.7559 226.7717 l
+912.7559 935.4331 l
+402.5197 1133.8583 l
+62.3622 935.4331 l
+h
+S
+0 G
+[] 0 d
+28.3465 192.7559 m
+946.7717 192.7559 l
+946.7717 958.7021 l
+399.5546 1171.5088 l
+28.3465 954.9707 l
+h
+S
+0 G
+17.0079 192.7559 m
+39.685 192.7559 l
+S
+28.3465 181.4173 m
+28.3465 204.0945 l
+S
+BT /F1 6 Tf 31.1811 195.5906 Td (x0y0) Tj ET
+17.0079 785.1969 m
+39.685 785.1969 l
+S
+28.3465 773.8583 m
+28.3465 796.5354 l
+S
+BT /F1 6 Tf 31.1811 788.0315 Td (x0y1) Tj ET
+527.2441 192.7559 m
+549.9213 192.7559 l
+S
+538.5827 181.4173 m
+538.5827 204.0945 l
+S
+BT /F1 6 Tf 541.4173 195.5906 Td (x1y0) Tj ET
+527.2441 785.1969 m
+549.9213 785.1969 l
+S
+538.5827 773.8583 m
+538.5827 796.5354 l
+S
+BT /F1 6 Tf 541.4173 788.0315 Td (x1y1) Tj ET
+Q
+q
+0.7 G
+0.25 w
+[2 2] 0 d
+28.3465 192.7559 538.5827 620.7874 re S
+Q
+q
+0 G
+0.25 w
+[3 2] 0 d
+28.3465 28.3465 141.7323 141.7323 re S
+[] 0 d
+BT /F1 9 Tf 187.0866 158.7402 Td (50mm calibration square - DO NOT CUT) Tj ET
+BT /F1 7 Tf 187.0866 141.7323 Td (Measure it. If it is not 50mm, the print is scaled and the pattern is wrong.) Tj ET
+BT /F1 7 Tf 187.0866 124.7244 Td (Golden Panel  -  sheet 3 of 4  \(column 1 of 2, row 2 of 2\)) Tj ET
+BT /F1 7 Tf 187.0866 107.7165 Td (solid = cut line \(seam allowance 12 mm\).  dashed grey = sewing line.) Tj ET
+BT /F1 7 Tf 187.0866 90.7087 Td (Assembly: overlap the crosses, do not trim. Matching labels \(x1y0\) must coincide.) Tj ET
+Q
+endstream
+endobj
+12 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595.2756 841.8898] /Resources << /Font << /F1 3 0 R >> >> /Contents 13 0 R >>
+endobj
+13 0 obj
+<< /Length 1601 >>
+stream
+% patal-tile piece="Golden Panel" col=1 row=0 columns=2 rows=2 origin_mm=168,-12 window_mm=190,219 window_origin_mm=10,68
+q
+28.3465 192.7559 538.5827 620.7874 re W n
+0.25 w
+0.45 G
+[4 3] 0 d
+-447.874 226.7717 m
+402.5197 226.7717 l
+402.5197 935.4331 l
+-107.7165 1133.8583 l
+-447.874 935.4331 l
+h
+S
+0 G
+[] 0 d
+-481.8898 192.7559 m
+436.5354 192.7559 l
+436.5354 958.7021 l
+-110.6817 1171.5088 l
+-481.8898 954.9707 l
+h
+S
+0 G
+17.0079 192.7559 m
+39.685 192.7559 l
+S
+28.3465 181.4173 m
+28.3465 204.0945 l
+S
+BT /F1 6 Tf 31.1811 195.5906 Td (x1y0) Tj ET
+17.0079 785.1969 m
+39.685 785.1969 l
+S
+28.3465 773.8583 m
+28.3465 796.5354 l
+S
+BT /F1 6 Tf 31.1811 788.0315 Td (x1y1) Tj ET
+527.2441 192.7559 m
+549.9213 192.7559 l
+S
+538.5827 181.4173 m
+538.5827 204.0945 l
+S
+BT /F1 6 Tf 541.4173 195.5906 Td (x2y0) Tj ET
+527.2441 785.1969 m
+549.9213 785.1969 l
+S
+538.5827 773.8583 m
+538.5827 796.5354 l
+S
+BT /F1 6 Tf 541.4173 788.0315 Td (x2y1) Tj ET
+Q
+q
+0.7 G
+0.25 w
+[2 2] 0 d
+28.3465 192.7559 538.5827 620.7874 re S
+Q
+q
+0 G
+0.25 w
+[3 2] 0 d
+28.3465 28.3465 141.7323 141.7323 re S
+[] 0 d
+BT /F1 9 Tf 187.0866 158.7402 Td (50mm calibration square - DO NOT CUT) Tj ET
+BT /F1 7 Tf 187.0866 141.7323 Td (Measure it. If it is not 50mm, the print is scaled and the pattern is wrong.) Tj ET
+BT /F1 7 Tf 187.0866 124.7244 Td (Golden Panel  -  sheet 4 of 4  \(column 2 of 2, row 2 of 2\)) Tj ET
+BT /F1 7 Tf 187.0866 107.7165 Td (solid = cut line \(seam allowance 12 mm\).  dashed grey = sewing line.) Tj ET
+BT /F1 7 Tf 187.0866 90.7087 Td (Assembly: overlap the crosses, do not trim. Matching labels \(x1y0\) must coincide.) Tj ET
+Q
+endstream
+endobj
+xref
+0 14
+0000000000 65535 f 
+0000000081 00000 n 
+0000000130 00000 n 
+0000000213 00000 n 
+0000000310 00000 n 
+0000000446 00000 n 
+0000001822 00000 n 
+0000001958 00000 n 
+0000003602 00000 n 
+0000003738 00000 n 
+0000005390 00000 n 
+0000005528 00000 n 
+0000007173 00000 n 
+0000007311 00000 n 
+trailer
+<< /Size 14 /Root 1 0 R /ID [<50617461-6c2d-4578-706f-72742d76310a> <50617461-6c2d-4578-706f-72742d76310a>] >>
+startxref
+8964
+%%EOF

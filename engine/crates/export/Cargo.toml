@@ -1,0 +1,18 @@
+[package]
+name = "patal-export"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+publish.workspace = true
+
+# No dependencies, deliberately. The PDF this crate writes is a golden-file
+# fixture, so byte-for-byte determinism is a hard requirement — and every PDF
+# crate on crates.io stamps a creation date, compresses streams with a zlib
+# whose output is not guaranteed stable across versions, or both. Writing the
+# ~2% of PDF this crate needs (lines, a clip rect, base-14 text) costs less
+# than fighting a library for reproducibility, and adds nothing to the
+# `cargo deny` surface.
+[dependencies]
+patal-geometry = { path = "../geometry" }
+patal-pattern = { path = "../pattern" }

@@ -21,6 +21,7 @@ use std::fs;
 use std::path::PathBuf;
 use std::time::Instant;
 
+use patal_export::{export_tiled_pdf, PageLayout};
 use patal_geometry::{EdgeSegment, PatternBoundary, Point2, SeamPath};
 use patal_materials::Material;
 use patal_pattern::{Document, PatternPiece, Project};
@@ -182,10 +183,83 @@ fn save_demo_document(directory: String, tolerance_mm: f64) -> Result<SaveReport
     })
 }
 
+#[derive(Serialize)]
+struct ExportReport {
+    path: String,
+    bytes: usize,
+    pages: usize,
+    /// The page size the PDF declares, so the operator can set the printer
+    /// driver's paper size to match it. A Letter tray printing an A4
+    /// document shrinks it by about six per cent and says nothing.
+    page_size: String,
+}
+
+/// Write a tiled, true-scale PDF of the demo piece.
+///
+/// The harness owns the file, not the export crate. `patal-export` returns
+/// bytes and touches no `std::fs`, which keeps the core free of the platform
+/// (ADR-001) and, more usefully, makes the failure mode benign: an I/O error
+/// here cannot leave a truncated PDF behind, because every byte was produced
+/// before the first one was written.
+///
+/// Even so the write goes through a temporary file and a rename. A rename
+/// within a directory is atomic on both platforms this runs on, so what sits
+/// at the destination is either the previous complete file or the new
+/// complete file, never four pages of a five-page pattern. A half-written PDF
+/// is the sharpest version of the defect "correct or loud" exists to forbid:
+/// it opens, it prints, and nothing about the paper says it is incomplete.
+#[tauri::command]
+fn export_demo_pdf(
+    directory: String,
+    tolerance_mm: f64,
+    letter: bool,
+) -> Result<ExportReport, String> {
+    let path = bodice_front()?;
+    let boundary = path.flatten(tolerance_mm).map_err(|err| err.to_string())?;
+    let piece = PatternPiece::new("Bodice Front", boundary);
+
+    let layout = if letter {
+        PageLayout::letter()
+    } else {
+        PageLayout::a4()
+    };
+    let pdf = export_tiled_pdf(&[&piece], &layout).map_err(|err| err.to_string())?;
+
+    let mut file: PathBuf = PathBuf::from(&directory);
+    file.push("harness-demo.pdf");
+    let mut temporary = file.clone();
+    temporary.set_extension("pdf.writing");
+
+    fs::write(&temporary, &pdf).map_err(|err| err.to_string())?;
+    fs::rename(&temporary, &file).map_err(|err| {
+        // Clean up rather than leave a stray `.pdf.writing` beside the real
+        // file for someone to find later and wonder about.
+        let _ = fs::remove_file(&temporary);
+        err.to_string()
+    })?;
+
+    Ok(ExportReport {
+        pages: String::from_utf8_lossy(&pdf)
+            .matches("/Type /Page ")
+            .count(),
+        path: file.display().to_string(),
+        bytes: pdf.len(),
+        page_size: format!(
+            "{} x {} mm",
+            layout.page_width().get(),
+            layout.page_height().get()
+        ),
+    })
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
-        .invoke_handler(tauri::generate_handler![cut_preview, save_demo_document])
+        .invoke_handler(tauri::generate_handler![
+            cut_preview,
+            save_demo_document,
+            export_demo_pdf
+        ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
@@ -236,5 +310,58 @@ mod tests {
         assert_eq!(report.material_name.as_deref(), Some("Wool Crepe"));
 
         let _ = fs::remove_file(directory.join("harness-demo.patal"));
+    }
+
+    #[test]
+    fn the_demo_piece_exports_to_a_real_pdf_on_disk() {
+        let directory = std::env::temp_dir();
+        let report = export_demo_pdf(directory.display().to_string(), 0.4, false)
+            .expect("the demo piece exports");
+
+        assert!(
+            report.pages >= 2,
+            "a calibration page and at least one sheet"
+        );
+        assert_eq!(report.page_size, "210 x 297 mm");
+
+        let written = fs::read(&report.path).expect("the file is there");
+        assert_eq!(written.len(), report.bytes);
+        assert!(written.starts_with(b"%PDF-1.7"));
+        assert!(written.ends_with(b"%%EOF\n"), "not truncated");
+
+        // The temporary must not survive a successful write.
+        assert!(
+            !directory.join("harness-demo.pdf.writing").exists(),
+            "the in-progress file was left behind"
+        );
+
+        let _ = fs::remove_file(&report.path);
+    }
+
+    #[test]
+    fn exporting_twice_replaces_the_file_rather_than_appending_to_it() {
+        // The rename path, exercised against an existing destination —
+        // the case where a non-atomic write would leave the tail of the
+        // previous, longer document glued to the end of the new one.
+        let directory = std::env::temp_dir().join("patal-export-twice");
+        fs::create_dir_all(&directory).expect("can create a scratch directory");
+
+        let first = export_demo_pdf(directory.display().to_string(), 1.0, false).unwrap();
+        let second = export_demo_pdf(directory.display().to_string(), 0.1, false).unwrap();
+
+        let written = fs::read(&second.path).expect("the file is there");
+        assert_eq!(written.len(), second.bytes);
+        assert_ne!(
+            first.bytes, second.bytes,
+            "a finer tolerance should produce a different document"
+        );
+        assert_eq!(
+            String::from_utf8_lossy(&written).matches("%%EOF").count(),
+            1,
+            "two end-of-file markers means the previous document's tail is \
+             still glued to the end of this one"
+        );
+
+        let _ = fs::remove_dir_all(&directory);
     }
 }
