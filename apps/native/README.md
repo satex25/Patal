@@ -45,32 +45,38 @@ and to run on the iOS Simulator or physical devices. To wire it up:
 `PatalKit`'s models (`Point2`, `PatternBoundary`, `Material`,
 `PatternPiece`, `Project`) are hand-written Swift mirrors of the Rust engine
 types in `../../engine`. They exist so the UI has something real to build
-against today. `PatternBoundary.offset` and `PatternPiece`'s seam-allowance
-validation are ported from the Rust engine's implementation directly — same
-mitre limit, same bevel joins, same self-intersection and winding checks,
-same errors thrown instead of a wrong-looking number — so this is no longer
-a thin display-only mirror.
+against today.
 
-That does not make it a binding. It is still a second, hand-maintained
-implementation that can drift from the Rust engine on the next change to
-either side, and `PatternPiece`/`Project` still carry a `UUID` that Rust's
-types have no counterpart for, so `PatternPiece`'s JSON shape is
-Swift-to-Swift only (unlike `PatternBoundary`'s, which matches the Rust
-engine's wire format exactly). The next milestone is still replacing all of
-this with the uniffi-generated Swift bindings from `patal-ffi`, packaged
-as an XCFramework — at that point these files collapse into thin
-view-model wrappers around the generated types instead of parallel
-implementations.
+**This package holds no geometry, on purpose.** It carries
+`PatternBoundary`'s *construction contract* — at least three finite points,
+consecutive duplicates dropped, private storage behind a read-only
+accessor, `Codable` matching the Rust engine's bare-point-array wire shape
+— and its perimeter, a sum of distances with no error surface. It does not
+offset, and it does not compute winding, signed area, or self-intersection.
 
-**A note on how the offset port was verified in this environment:** `swift
-test` needs full Xcode for `XCTest`, which isn't installed here (see above).
-The XCTest cases in `Tests/PatalKitTests` are written but couldn't be
-executed locally as a result. Instead, every one of the Rust engine's own
-numeric test cases — including the exact inputs that used to corrupt the
-old Rust kernel with NaN, fling a vertex hundreds of millimetres off a
-piece, or silently invert a winding — was ported into a throwaway
-executable target, run with `swift run`, and checked against the Rust
-engine's own output to six decimal places. All matched. The throwaway
-target was then deleted; it never touched `Package.swift` in the committed
-state. Once Xcode is installed, `swift test` should be run for real before
-trusting this note over the actual test suite.
+It used to. A 368-line line-for-line port of the Rust offset kernel lived
+here: same mitre limit, same bevel joins, same validity checks. That made
+two independent implementations of the geometry that decides where cloth
+gets cut, with nothing checking them against each other — and the failure
+mode of drift is not a red test, it is a garment cut wrong. The alternative
+to deleting it was a committed corpus of golden vectors asserted by both
+test suites. That would have worked, and would also have taxed every future
+change to the engine's error surface with a matching edit here, forever, to
+pin code with a scheduled death date. Nothing depended on the port: there
+is no Xcode project in this repo, and `cutBoundary()`'s only caller was its
+own test suite. So it was deleted instead.
+
+Seam-allowance geometry reaches this package through uniffi-generated
+bindings from `patal-ffi`, packaged as an XCFramework, once a Mac is
+available to build one. At that point these files become thin view-model
+wrappers around generated types rather than parallel implementations.
+
+The remaining divergence is the identity model: `PatternPiece` and `Project`
+carry a `UUID` that Rust's types have no counterpart for, so
+`PatternPiece`'s JSON shape is Swift-to-Swift only, unlike
+`PatternBoundary`'s, which matches the Rust engine's wire format exactly.
+
+**Nothing here has ever been compiled.** There is no macOS toolchain on the
+machine this is developed on. CI's `native` job (`swift build` + `swift
+test` on `macos-latest`) is the only verification this code has, and its
+first green run will be the first evidence the package builds at all.

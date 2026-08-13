@@ -60,11 +60,12 @@ This is a foundation, not a product yet. What's real today, and what isn't:
   `hypot`-based distance math. Every fallible input (non-finite coordinates,
   a zero-length edge, an inset larger than the piece can give) returns a
   typed `GeometryError` rather than a plausible-looking wrong number — there
-  is no silent corruption path left in this crate. `PatternPiece` and
-  `Project` sit on top with the same discipline: `seam_allowance_mm` is
-  validated, not a bare public field. 47 unit tests passing
-  (`cargo test --workspace` inside `engine/`), `cargo clippy --workspace
-  --all-targets -- -D warnings` clean.
+  is no silent corruption path left in this crate. A failed offset says
+  which two edges cross, so a UI can point at the problem rather than only
+  naming it. `PatternPiece` and `Project` sit on top with the same
+  discipline: `seam_allowance_mm` is validated, not a bare public field.
+  52 unit tests passing (`cargo test --workspace` inside `engine/`),
+  `cargo clippy --workspace --all-targets -- -D warnings` clean.
 - `patal-ffi`: exports the engine's fallible boundary operations
   (perimeter, offset) across the uniffi boundary as `Result`, not as NaN —
   a caller on the other side gets a real error, not a number it has to
@@ -72,25 +73,16 @@ This is a foundation, not a product yet. What's real today, and what isn't:
   **No Swift bindings are generated or committed**, there is no XCFramework,
   and nothing in `apps/native` calls into this crate yet — the seam exists
   and is tested from the Rust side, but it is not yet a working pipeline.
-- `apps/native`: a Swift package (`PatalKit`) with hand-written Swift
-  mirrors of the engine's domain types plus a basic SwiftUI shell. As of
-  this port, `PatternBoundary.offset` and `PatternPiece`'s validated seam
-  allowance are ported line-for-line from the Rust engine — same mitre
-  limit, same bevel-join and self-intersection checks, same errors thrown
-  instead of a wrong-looking number — so all three Apple platforms can now
-  compute a real seam allowance, not just Windows. `PatternBoundary` also
-  gained hand-written `Codable` matching the Rust engine's JSON wire shape
-  (a bare point array) exactly. Built clean via `swift build` before this
-  rename; not re-verified since (no Swift toolchain in this environment).
-  `swift test` needs full Xcode for `XCTest` and cannot run in this environment
-  (only Command Line Tools are present), so the port was instead verified
-  by running every one of the Rust engine's own numeric test cases —
-  including the specific inputs that used to corrupt the old kernel —
-  through a throwaway executable and confirming the outputs match to six
-  decimal places; see `apps/native/README.md` for the Xcode project setup
-  needed to actually run `swift test` here. This is still a second,
-  independent implementation of the domain model, not a binding to the
-  first — see the note on that below.
+- `apps/native`: a Swift package (`PatalKit`) with hand-written model
+  mirrors of the engine's domain types plus a basic SwiftUI shell. It holds
+  `Point2`, `PatternBoundary` (construction invariant and `Codable` matching
+  the Rust engine's bare-point-array wire shape exactly), `Material`,
+  `PatternPiece`, and `Project`. It deliberately holds **no geometry**: the
+  368-line hand-ported offset kernel that used to live here was deleted, so
+  there is exactly one implementation of the math that decides where cloth
+  gets cut. See the note below. Never built or tested in this environment —
+  there is no macOS toolchain here, and CI's `native` job is the only
+  `swift build` this code has ever had.
 - `apps/desktop`: a Tauri app whose Rust backend links `patal-geometry`
   and `patal-pattern` directly (no FFI boundary — both are Rust) and
   exposes one command, `engine_demo_perimeter_mm`, that a Tailwind-styled
@@ -98,27 +90,52 @@ This is a foundation, not a product yet. What's real today, and what isn't:
   demonstrate the desktop shell reaching the real, hardened engine; it does
   not yet exercise the engine's harder paths (offset, validation failures).
 
-**The Swift mirror is duplicated, not derived, and that is real architectural
-debt — narrower now, but not closed.** `PatalKit`'s types are hand-written
-to look like the Rust engine's, not generated from it, so the two can still
-drift out of sync on the next change to either side; porting `offset` by
-hand fixed today's gap but didn't fix the mechanism that created it. The
-identity model has also diverged and stayed diverged: Swift's `PatternPiece`
-and `Project` carry a `UUID` that Rust's types have no counterpart for, so
-`PatternPiece`'s `Codable` conformance is Swift-to-Swift only — it does not
-yet match the Rust engine's wire format the way `PatternBoundary`'s does.
-The long-term fix is wiring `apps/native` to the real engine through uniffi,
-not maintaining two implementations in parallel; that work has not started.
+**There is now one implementation of the cut path, not two.** `PatalKit`
+used to carry a hand-ported copy of the offset kernel — same mitre limit,
+same bevel joins, same winding and self-intersection checks — which meant
+two independent implementations decided where cloth gets cut and nothing
+checked them against each other. That is a liability rather than a feature:
+whichever one drifts, a designer finds out in cloth. It was deleted rather
+than pinned in place with a cross-language conformance corpus, because
+nothing depended on it. There is no Xcode project in this repo, and the
+port's only caller was its own test suite. Seam-allowance geometry belongs
+to `patal-geometry` and will reach Swift through uniffi-generated bindings.
+
+The remaining Swift/Rust gap is the identity model, and it is unchanged:
+Swift's `PatternPiece` and `Project` carry a `UUID` that Rust's types have
+no counterpart for, so `PatternPiece`'s `Codable` conformance is
+Swift-to-Swift only — unlike `PatternBoundary`'s, which matches the Rust
+wire format exactly.
 
 What's deliberately not started: the parametric propagation/constraint
-solver (patterns as "a living system" where edits propagate), a
-serialization layer for saving/loading a `Project` (nothing in `engine/`
-derives `Serialize`/`Deserialize` yet, so no document can currently leave
-process memory), manufacturing export (DXF/AAMA, PDF), the AI collaborator
-layer, and any visual identity (colors/type) — none of that was specified
-yet.
+solver (patterns as "a living system" where edits propagate), a document
+layer that can save and load a `Project` to disk, manufacturing export
+(DXF/AAMA, tiled PDF at true scale), grading, the AI collaborator layer,
+and any visual identity (colors/type).
+
+Note that the serialization *primitives* are done, contrary to what this
+file used to claim: every domain type in `engine/` derives `Serialize` and
+`Deserialize`, with passing JSON round-trip tests, and `PatternBoundary`
+routes deserialization through its validating constructor via
+`#[serde(try_from)]`. What is missing is the document envelope around them
+— a schema version, atomic save/load, and the file format itself — not the
+serde work.
 
 ## Getting started
+
+### Prerequisites
+
+- **Rust** — the exact toolchain is pinned by `rust-toolchain.toml`; rustup
+  picks it up automatically the first time `cargo` runs in this checkout.
+- **On Windows: Visual Studio Build Tools** with the "Desktop development
+  with C++" workload. Rust's MSVC target links with `link.exe`, which ships
+  with that workload and nothing else.
+- **Node 20+** for the desktop app (`apps/desktop/.nvmrc` pins the version).
+- **macOS with full Xcode** for `apps/native` — the Command Line Tools alone
+  can `swift build` but cannot `swift test`, because `XCTest` ships with
+  Xcode proper.
+
+### Building
 
 ```sh
 # Engine
@@ -130,6 +147,45 @@ cd apps/native && swift build
 # Desktop app
 cd apps/desktop && npm install && npm run tauri dev
 ```
+
+### If you are on Windows and use Git Bash
+
+`cargo build` will fail with something that looks nothing like the real
+problem:
+
+```
+= note: /usr/bin/link: extra operand '/NOLOGO'
+error: linking with `link.exe` failed: exit code: 1
+```
+
+Git Bash ships a coreutils `link` that shadows MSVC's `link.exe` on `PATH`,
+so cargo invokes the wrong program. **rustc's own hint is misleading here:**
+it suggests repairing your Visual Studio installation, which is fine and is
+not the problem.
+
+Use the committed wrapper instead — it locates the toolset with `vswhere`,
+sources `vcvars64.bat`, and runs cargo with the right `PATH`:
+
+```sh
+cmd //c 'scripts\cargo.bat test --workspace --locked'
+cmd //c 'scripts\cargo.bat clippy --workspace --all-targets --locked -- -D warnings'
+cmd //c 'scripts\cargo.bat fmt --check'
+```
+
+From PowerShell or `cmd`, drop the `cmd //c` and call `scripts\cargo.bat`
+directly. It defaults to the `engine/` workspace; set `PATAL_CARGO_DIR` to
+point it elsewhere:
+
+```sh
+PATAL_CARGO_DIR='C:\path\to\patal\apps\desktop\src-tauri' cmd //c 'scripts\cargo.bat clippy'
+```
+
+This deliberately stays out of `.cargo/config.toml`: the vcvars path is
+machine-local and would break CI, which already has a working linker.
+
+A "Developer Command Prompt for VS" also works and needs no wrapper — the
+wrapper exists so that the ordinary shell people already have open does the
+right thing.
 
 ## License
 

@@ -68,14 +68,11 @@ public struct PatternPiece: Identifiable, Equatable, Sendable {
         storedSeamAllowanceMM = try Self.validate(valueMM)
     }
 
-    /// The outline including seam allowance — what actually gets cut.
-    public func cutBoundary() throws -> PatternBoundary {
-        do {
-            return try boundary.offset(storedSeamAllowanceMM)
-        } catch let error as GeometryError {
-            throw PatternError.geometry(error)
-        }
-    }
+    // `cutBoundary()` used to live here, offsetting the boundary through a
+    // Swift port of the engine's kernel. Both are gone: the cut line is
+    // computed by `patal-geometry` and will reach this package through uniffi
+    // bindings, so there is exactly one implementation of the geometry that
+    // decides where cloth gets cut. See the note on `PatternBoundary`.
 }
 
 extension PatternPiece: Codable {
