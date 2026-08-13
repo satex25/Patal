@@ -24,6 +24,9 @@ publish = false
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["float_roundtrip"] }
 proptest = "1"
+# `html_reports` off: the extra plotting dependency tree buys a chart
+# nobody reads in a project whose benchmark question is a yes/no budget check.
+criterion = { version = "0.8", default-features = false, features = ["cargo_bench_support"] }
 
 [profile.release]
 lto = true
