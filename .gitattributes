@@ -1,0 +1,26 @@
+# Line-ending policy (blueprint §3.0).
+#
+# Why this file exists: `core.autocrlf=true` with no `.gitattributes` means
+# every tool that rewrites a file with its own newline convention — Obsidian
+# re-saving a note, in the case that prompted this — shows up as a phantom
+# modification with an empty diff. `git status` stops meaning anything, and a
+# status you have learned to ignore is worse than no status at all.
+#
+# The rule: text is normalised to LF in the repository. What lands in the
+# working tree is still governed by `core.autocrlf`, so Windows editors keep
+# seeing CRLF; what is *stored* is LF, always, on every machine.
+* text=auto eol=lf
+
+# Windows batch files are the exception, and it is not cosmetic. `cmd.exe`
+# parses a `.bat` line-by-line as it executes; an LF-only file can drop the
+# last character of a line inside a parenthesised block or a `goto` target and
+# fail in ways that read as a corrupt script. `scripts/cargo.bat` is the only
+# supported way to build this project on the dev machine, so it stays CRLF.
+*.bat text eol=crlf
+
+# Binary: never normalised, never diffed as text.
+*.png binary
+*.ico binary
+*.icns binary
+*.pdf binary
+*.dxf binary
