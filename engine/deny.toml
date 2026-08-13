@@ -1,0 +1,109 @@
+# cargo-deny configuration for the Pātāl engine workspace.
+#
+# Run locally with:
+#     cmd //c 'scripts\cargo.bat deny check'
+#
+# CI splits this into two jobs on purpose — see .github/workflows/ci.yml:
+#
+#   * `licenses bans sources` block every PR. They are deterministic
+#     functions of Cargo.lock, so they only change when a dependency
+#     changes, and a red result is always the fault of the commit under
+#     test.
+#   * `advisories` runs on a schedule and does NOT block. The advisory
+#     database is a moving target: a RUSTSEC entry published overnight
+#     would otherwise redden an unrelated pull request, and a gate that
+#     goes red for reasons the author cannot act on is a gate people learn
+#     to ignore.
+
+[graph]
+# Only the targets actually built. Checking every tier-3 target pulls in
+# platform crates nothing here compiles against.
+targets = [
+    { triple = "x86_64-pc-windows-msvc" },
+    { triple = "x86_64-unknown-linux-gnu" },
+    { triple = "aarch64-apple-darwin" },
+    { triple = "aarch64-apple-ios" },
+]
+all-features = true
+
+[advisories]
+version = 2
+yanked = "deny"
+
+ignore = [
+    # paste 1.0.15 — unmaintained, archived by its author. Not a
+    # vulnerability: it is a proc-macro that concatenates identifiers at
+    # compile time, so it contributes no runtime code and no attack
+    # surface to a shipped binary.
+    #
+    # Reached only through uniffi 0.28.3 -> uniffi_core. There is nothing
+    # to upgrade to: the advisory itself says "No safe upgrade is
+    # available", and the fix is upstream in uniffi, not here.
+    #
+    # Revisit when the FFI surface is next touched — uniffi 0.29 dropped
+    # paste, so this ignore should die with the version bump rather than
+    # be renewed. Anything that expands patal-ffi should check this first.
+    { id = "RUSTSEC-2024-0436", reason = "compile-time proc-macro reached only via uniffi 0.28; no upgrade path until uniffi 0.29" },
+
+    # bincode 1.3.3 — unmaintained. Same shape: reached only through
+    # uniffi_macros 0.28.3, used at build time for uniffi's own metadata
+    # encoding. Pātāl does not use bincode for anything of its own, and
+    # the .patal document format is JSON.
+    { id = "RUSTSEC-2025-0141", reason = "build-time dependency of uniffi_macros 0.28; not used by any Pātāl code path" },
+]
+
+[licenses]
+version = 2
+
+# Pātāl ships proprietary (see LICENSE). Everything allowed here is
+# permissive enough to link into a closed-source binary with attribution.
+allow = [
+    "Apache-2.0",
+    "MIT",
+    "Unicode-3.0",
+    "Unlicense",
+
+    # MPL-2.0 is weak, file-level copyleft, and is the one entry here that
+    # is a judgement call rather than a formality. It reaches us through
+    # uniffi and its sub-crates. Linking an unmodified MPL library into a
+    # proprietary product is explicitly permitted (MPL-2.0 §3.3); the
+    # obligation attaches only to modified MPL-licensed *files*, which
+    # would have to be published under MPL.
+    #
+    # Practical consequence: do not vendor-and-patch uniffi. If uniffi
+    # ever needs a fix, upstream it or fork it publicly.
+    "MPL-2.0",
+]
+
+confidence-threshold = 0.93
+
+# The four workspace crates (patal-geometry, patal-materials,
+# patal-pattern, patal-ffi) carry no `license` field because they are
+# `publish = false` and proprietary — there is no license to declare to
+# crates.io. Without this they are reported as `unlicensed` errors, which
+# is what made `cargo deny check` fail on arrival with four of its ~40
+# errors coming from Pātāl's own code.
+private = { ignore = true }
+
+[bans]
+# A duplicate version is worth seeing but is not the committing author's
+# fault most of the time (today: two `syn` majors, pulled in by uniffi).
+# Warn so it stays visible without blocking unrelated work.
+multiple-versions = "warn"
+
+wildcards = "deny"
+# ...except for the workspace's own path dependencies. `patal-ffi` depends
+# on `patal-geometry` with `{ path = "../geometry" }` and no version, which
+# is correct for `publish = false` crates and is what cargo-deny reports as
+# a wildcard. Without this, five of Pātāl's own internal edges fail the
+# gate while every third-party dependency passes it.
+allow-wildcard-paths = true
+# Nothing is banned outright yet. This section exists so that when
+# something is (a duplicate geometry crate, an accidental async runtime),
+# there is an obvious place to put it.
+deny = []
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]

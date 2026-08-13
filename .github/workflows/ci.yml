@@ -4,6 +4,9 @@ on:
   push:
     branches: [main, master]
   pull_request:
+  schedule:
+    # Feeds the `advisories` job only. Monday 06:00 UTC.
+    - cron: '0 6 * * 1'
 
 # Cancel superseded runs on the same branch/PR rather than let them queue.
 concurrency:
@@ -42,6 +45,66 @@ jobs:
       - name: cargo clippy -D warnings
         working-directory: engine
         run: cargo clippy --workspace --all-targets --locked -- -D warnings
+
+      - name: cargo test
+        working-directory: engine
+        run: cargo test --workspace --locked
+
+      # `cargo doc` rejects `-D`; the flag has to reach rustdoc through the
+      # environment. `cargo doc --no-deps -D warnings` fails with
+      # "unexpected argument '-D' found" and documents nothing.
+      - name: cargo doc (broken intra-doc links are errors)
+        working-directory: engine
+        env:
+          RUSTDOCFLAGS: -D warnings
+        run: cargo doc --no-deps --workspace --locked
+
+      - name: cargo deny (licenses, bans, sources)
+        uses: EmbarkStudios/cargo-deny-action@v2
+        with:
+          manifest-path: engine/Cargo.toml
+          # Advisories deliberately excluded — they run on a schedule in
+          # their own non-blocking job. These three are pure functions of
+          # Cargo.lock, so a red result here is always caused by the commit
+          # under test.
+          command: check licenses bans sources
+
+  # Split out and non-blocking on purpose. The RustSec database changes
+  # under us: an advisory published overnight would otherwise turn an
+  # unrelated pull request red for a reason its author cannot act on, and
+  # a gate that goes red for reasons you cannot act on is one people learn
+  # to ignore. This reports; it does not block.
+  advisories:
+    name: advisories (RustSec, non-blocking)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: EmbarkStudios/cargo-deny-action@v2
+        with:
+          manifest-path: engine/Cargo.toml
+          command: check advisories
+
+  # The only platform Pātāl is actually developed on, and until now the one
+  # platform CI never built. Cheapest job in the matrix; covers 100% of
+  # local development.
+  engine-windows:
+    name: engine (Windows)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve pinned toolchain
+        run: rustup show
+
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            engine/target
+          key: ${{ runner.os }}-cargo-engine-${{ hashFiles('engine/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-engine-
 
       - name: cargo test
         working-directory: engine

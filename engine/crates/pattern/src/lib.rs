@@ -64,7 +64,7 @@ pub struct Measurement {
 /// One cuttable piece of a garment: its outline, seam allowance, and the
 /// material it will be cut from.
 ///
-/// Serializes and deserializes through [`PatternPieceData`], the same way
+/// Serializes and deserializes through a private `PatternPieceData`, the same way
 /// `PatternBoundary` goes through a plain `Vec<Point2>`: the wire format is
 /// the natural shape, but arriving values are re-validated by
 /// [`PatternPiece::set_seam_allowance_mm`] rather than assigned directly —
