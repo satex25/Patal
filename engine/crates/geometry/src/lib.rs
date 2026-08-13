@@ -17,6 +17,10 @@ use std::fmt;
 
 use serde::{Deserialize, Serialize};
 
+mod curves;
+
+pub use curves::{EdgeSegment, SeamPath};
+
 /// Everything that can go wrong in this crate.
 #[derive(Debug, Clone, PartialEq)]
 pub enum GeometryError {
@@ -63,6 +67,19 @@ pub enum GeometryError {
         distance_mm: f64,
         source: Box<GeometryError>,
     },
+    /// A control point of an authored curve was NaN or infinite. `segment`
+    /// indexes the segment it belongs to, so an editor can select it.
+    NonFiniteControlPoint { segment: usize },
+    /// A [`SeamPath`] did not return to where it started. An outline that
+    /// does not close encloses no area, so there is no inside to offset
+    /// away from — and quietly appending a closing edge would be inventing
+    /// geometry the designer did not draw. Use [`SeamPath::closed`] to ask
+    /// for that edge explicitly.
+    PathNotClosed { start: Point2, end: Point2 },
+    /// A flattening tolerance was zero, negative, or non-finite. There is
+    /// no sensible default to fall back to: the tolerance is the entire
+    /// contract between an authored curve and the polygon that gets cut.
+    ToleranceNotPositive { tolerance_mm: f64 },
 }
 
 impl fmt::Display for GeometryError {
@@ -103,6 +120,18 @@ impl fmt::Display for GeometryError {
             } => write!(
                 f,
                 "offsetting by {distance_mm}mm produced an invalid boundary: {source}"
+            ),
+            Self::NonFiniteControlPoint { segment } => {
+                write!(f, "segment {segment} has a non-finite control point")
+            }
+            Self::PathNotClosed { start, end } => write!(
+                f,
+                "path starts at ({}, {}) but ends at ({}, {})",
+                start.x, start.y, end.x, end.y
+            ),
+            Self::ToleranceNotPositive { tolerance_mm } => write!(
+                f,
+                "flattening tolerance {tolerance_mm}mm must be positive and finite"
             ),
         }
     }
