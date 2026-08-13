@@ -41,7 +41,28 @@ pub enum GeometryError {
     /// The offset outline crosses itself — the classic dart/notch failure,
     /// where a concave feature narrower than twice the offset turns inside
     /// out instead of vanishing.
-    OffsetSelfIntersects { distance_mm: f64 },
+    ///
+    /// `edges` names the two crossing edges **of the offset outline** (edge
+    /// `i` runs from its point `i` to point `i + 1`, cyclically), so a UI can
+    /// point at the failure instead of only naming it: this is what lets the
+    /// app say "the seam allowance *here* exceeds the curve's radius" rather
+    /// than the useless "somewhere on this piece".
+    OffsetSelfIntersects {
+        distance_mm: f64,
+        edges: (usize, usize),
+    },
+    /// Offsetting produced a point list that is not a valid boundary at all.
+    ///
+    /// Distinct from [`OffsetCollapsed`](Self::OffsetCollapsed), which is the
+    /// specific geometric failure of an inset eating the piece. This one
+    /// carries the real reason — a coordinate that overflowed to infinity, or
+    /// a join sequence that deduplicated below three points — because
+    /// reporting "collapsed" for a `NonFiniteCoordinate` is exactly the
+    /// plausible-looking wrong answer this crate's header forbids.
+    OffsetProducedInvalidBoundary {
+        distance_mm: f64,
+        source: Box<GeometryError>,
+    },
 }
 
 impl fmt::Display for GeometryError {
@@ -70,15 +91,31 @@ impl fmt::Display for GeometryError {
                 f,
                 "offsetting by {distance_mm}mm collapsed the boundary through itself"
             ),
-            Self::OffsetSelfIntersects { distance_mm } => write!(
+            Self::OffsetSelfIntersects { distance_mm, edges } => write!(
                 f,
-                "offsetting by {distance_mm}mm produced a self-intersecting outline"
+                "offsetting by {distance_mm}mm produced a self-intersecting outline: \
+                 edges {} and {} cross",
+                edges.0, edges.1
+            ),
+            Self::OffsetProducedInvalidBoundary {
+                distance_mm,
+                source,
+            } => write!(
+                f,
+                "offsetting by {distance_mm}mm produced an invalid boundary: {source}"
             ),
         }
     }
 }
 
-impl std::error::Error for GeometryError {}
+impl std::error::Error for GeometryError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::OffsetProducedInvalidBoundary { source, .. } => Some(source.as_ref()),
+            _ => None,
+        }
+    }
+}
 
 /// Which way a boundary is wound, or that the question has no answer.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -243,9 +280,24 @@ impl PatternBoundary {
 
     /// Whether any two non-adjacent edges cross.
     ///
-    /// `O(n²)`, which is the right trade at pattern-piece sizes (tens to low
-    /// hundreds of vertices) and keeps the check exact.
+    /// See [`first_self_intersection`](Self::first_self_intersection) when the
+    /// caller needs to know *where*, which is almost always — a UI that can
+    /// only say "this crosses itself" cannot show the designer what to fix.
     pub fn self_intersects(&self) -> bool {
+        self.first_self_intersection().is_some()
+    }
+
+    /// The first pair of crossing edge indices, scanning in index order, or
+    /// `None` when the boundary is simple.
+    ///
+    /// Edge `i` runs from point `i` to point `i + 1`, cyclically, so the
+    /// indices are directly usable for highlighting the offending span.
+    ///
+    /// `O(n²)`, which is the right trade at pattern-piece sizes (tens to low
+    /// hundreds of vertices) and keeps the check exact. Flattened curves push
+    /// `n` into the hundreds, which is why the drag loop caches its cut
+    /// boundary rather than recomputing this per frame.
+    pub fn first_self_intersection(&self) -> Option<(usize, usize)> {
         let n = self.points.len();
         for i in 0..n {
             let a1 = self.points[i];
@@ -258,11 +310,11 @@ impl PatternBoundary {
                 let b1 = self.points[j];
                 let b2 = self.points[(j + 1) % n];
                 if segments_properly_intersect(a1, a2, b1, b2) {
-                    return true;
+                    return Some((i, j));
                 }
             }
         }
-        false
+        None
     }
 
     /// Offsets every edge along its outward normal by `distance_mm`, then
@@ -373,11 +425,19 @@ impl PatternBoundary {
             }
         }
 
-        let offset = PatternBoundary::new(new_points)
-            .map_err(|_| GeometryError::OffsetCollapsed { distance_mm })?;
+        // Do not flatten this into `OffsetCollapsed`. A non-finite coordinate
+        // or a join list that deduplicated below three points is a different
+        // failure with a different fix, and reporting the wrong one sends the
+        // caller after the wrong problem.
+        let offset = PatternBoundary::new(new_points).map_err(|source| {
+            GeometryError::OffsetProducedInvalidBoundary {
+                distance_mm,
+                source: Box::new(source),
+            }
+        })?;
 
-        if offset.self_intersects() {
-            return Err(GeometryError::OffsetSelfIntersects { distance_mm });
+        if let Some(edges) = offset.first_self_intersection() {
+            return Err(GeometryError::OffsetSelfIntersects { distance_mm, edges });
         }
 
         Ok(offset)
@@ -684,6 +744,114 @@ mod tests {
         .expect("valid");
         assert!(bowtie.self_intersects());
         assert!(!square(10.0).self_intersects());
+    }
+
+    #[test]
+    fn self_intersection_names_the_crossing_edges() {
+        // Edge 0 runs (0,0) -> (100,100) and edge 2 runs (100,0) -> (0,100).
+        // Those are the two that cross; reporting a bare `true` throws away
+        // the only part a designer can act on.
+        let bowtie = PatternBoundary::new(vec![
+            Point2::new(0.0, 0.0),
+            Point2::new(100.0, 100.0),
+            Point2::new(100.0, 0.0),
+            Point2::new(0.0, 100.0),
+        ])
+        .expect("valid");
+
+        assert_eq!(bowtie.first_self_intersection(), Some((0, 2)));
+        assert_eq!(square(10.0).first_self_intersection(), None);
+    }
+
+    #[test]
+    fn a_narrow_slot_is_caught_as_a_collapse_not_a_crossing() {
+        // Pinned deliberately. The sibling test above accepts either error,
+        // which hid *which* one a narrow slot actually produces: the
+        // direction check fires first, because the slot's 14mm floor edge
+        // reverses under a 10mm allowance at exactly the same threshold as
+        // its two walls cross. Both conditions trip together for a
+        // rectangular slot, and the direction check is tested first.
+        //
+        // This matters because `OffsetSelfIntersects` documents itself as
+        // "the classic dart/notch failure" — and the classic dart/notch
+        // failure does not reach it. Whether any input does is an open
+        // question the proptest suite is the right tool to settle.
+        let slotted = PatternBoundary::new(vec![
+            Point2::new(0.0, 0.0),
+            Point2::new(100.0, 0.0),
+            Point2::new(100.0, 60.0),
+            Point2::new(57.0, 60.0),
+            Point2::new(57.0, 30.0),
+            Point2::new(43.0, 30.0),
+            Point2::new(43.0, 60.0),
+            Point2::new(0.0, 60.0),
+        ])
+        .expect("valid");
+
+        assert_eq!(
+            slotted.offset(10.0).unwrap_err(),
+            GeometryError::OffsetCollapsed { distance_mm: 10.0 }
+        );
+    }
+
+    #[test]
+    fn the_crossing_message_names_the_edges_it_found() {
+        let err = GeometryError::OffsetSelfIntersects {
+            distance_mm: 10.0,
+            edges: (2, 5),
+        };
+        assert!(
+            err.to_string().contains("edges 2 and 5 cross"),
+            "the message must name the span the UI is going to highlight: {err}"
+        );
+    }
+
+    #[test]
+    fn reported_indices_agree_with_the_crossing_test() {
+        // Guards the indices against drifting out of step with the predicate:
+        // the pair that comes back must independently pass the same check.
+        let bowtie = PatternBoundary::new(vec![
+            Point2::new(0.0, 0.0),
+            Point2::new(100.0, 100.0),
+            Point2::new(100.0, 0.0),
+            Point2::new(0.0, 100.0),
+        ])
+        .expect("valid");
+
+        let (i, j) = bowtie.first_self_intersection().expect("a bowtie crosses");
+        let points = bowtie.points();
+        let n = points.len();
+        assert!(segments_properly_intersect(
+            points[i],
+            points[(i + 1) % n],
+            points[j],
+            points[(j + 1) % n],
+        ));
+    }
+
+    #[test]
+    fn an_invalid_offset_result_keeps_the_real_reason() {
+        // `offset` used to answer every `PatternBoundary::new` failure with
+        // `OffsetCollapsed`, so a non-finite coordinate was reported as "the
+        // inset ate the piece" — a plausible-looking wrong error, which is
+        // the one thing this crate's header forbids.
+        //
+        // The join construction currently makes this path unreachable: the
+        // direction check fires first on every collapse, and the bevel branch
+        // can only emit points it was given. The variant exists so that when
+        // curves push flattened hundreds-of-vertex outlines through the same
+        // joins, a future reachable failure reports itself instead of lying.
+        let inner = GeometryError::NonFiniteCoordinate { index: 3 };
+        let wrapped = GeometryError::OffsetProducedInvalidBoundary {
+            distance_mm: 5.0,
+            source: Box::new(inner.clone()),
+        };
+
+        assert!(wrapped.to_string().contains("non-finite coordinate"));
+        assert!(!wrapped.to_string().contains("collapsed"));
+
+        let source = std::error::Error::source(&wrapped).expect("the cause is walkable");
+        assert_eq!(source.to_string(), inner.to_string());
     }
 
     #[test]
