@@ -23,6 +23,9 @@ publish = false
 [workspace.dependencies]
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["float_roundtrip"] }
+# v4 for minting ids, serde so an id is just a string on the wire and
+# interoperable with Swift's Foundation.UUID.
+uuid = { version = "1", features = ["v4", "serde"] }
 proptest = "1"
 # `html_reports` off: the extra plotting dependency tree buys a chart
 # nobody reads in a project whose benchmark question is a yes/no budget check.

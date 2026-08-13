@@ -1,7 +1,41 @@
 //! The material system: physical characteristics that inform construction,
 //! not just appearance.
 
+use std::fmt;
+
 use serde::{Deserialize, Serialize};
+use uuid::Uuid;
+
+/// A material's stable identity, independent of its name.
+///
+/// Names are not identity: two studios both have a "Cotton Poplin", and
+/// renaming one must not silently repoint every piece cut from it. On the
+/// wire this is a plain UUID string, which is what Swift's
+/// `Foundation.UUID` encodes to — so the identity model that had diverged
+/// between the two sides now agrees by construction rather than by
+/// coincidence.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct MaterialId(Uuid);
+
+impl MaterialId {
+    /// Mints a fresh identity. Deliberately not `Default`: an id should be
+    /// created where a material is created, never conjured to fill a gap.
+    #[allow(clippy::new_without_default)]
+    pub fn new() -> Self {
+        Self(Uuid::new_v4())
+    }
+
+    pub fn as_uuid(&self) -> Uuid {
+        self.0
+    }
+}
+
+impl fmt::Display for MaterialId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
 
 /// How a material falls and moves when worn — a construction concern, not
 /// just a visual one (drape affects seam placement, ease, and silhouette).
@@ -33,6 +67,10 @@ pub enum Rigidity {
 /// placeholder fabric) remain valid.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Material {
+    /// Private, and there is no setter. Identity is assigned once at
+    /// creation and preserved verbatim through serialization; letting a
+    /// caller reassign it would orphan every piece that references it.
+    id: MaterialId,
     pub name: String,
     pub weight_gsm: Option<f64>,
     pub thickness_mm: Option<f64>,
@@ -52,6 +90,7 @@ impl Material {
     /// filled in incrementally as the design develops.
     pub fn new(name: impl Into<String>) -> Self {
         Self {
+            id: MaterialId::new(),
             name: name.into(),
             weight_gsm: None,
             thickness_mm: None,
@@ -65,6 +104,10 @@ impl Material {
             reinforcement_requirements: Vec::new(),
             manufacturing_considerations: Vec::new(),
         }
+    }
+
+    pub fn id(&self) -> MaterialId {
+        self.id
     }
 }
 
@@ -98,10 +141,41 @@ impl MaterialLibrary {
         Self::default()
     }
 
-    pub fn add(&mut self, material: Material) {
+    /// Adds a material and hands back its id, so the caller can reference it
+    /// from a piece without having to go looking for it by name.
+    pub fn add(&mut self, material: Material) -> MaterialId {
+        let id = material.id();
         self.materials.push(material);
+        id
     }
 
+    /// The lookup that matters: identity, not name.
+    pub fn find_by_id(&self, id: MaterialId) -> Option<&Material> {
+        self.materials.iter().find(|m| m.id == id)
+    }
+
+    /// Editing access, by identity. Safe to hand out because `Material::id`
+    /// is private with no setter — a caller can change what a material *is*
+    /// but not which material it is, so no reference can be invalidated
+    /// through this.
+    pub fn find_by_id_mut(&mut self, id: MaterialId) -> Option<&mut Material> {
+        self.materials.iter_mut().find(|m| m.id == id)
+    }
+
+    /// Removes a material, returning it.
+    ///
+    /// Note what this deliberately does not do: it does not go hunting for
+    /// pieces that referenced the removed material. Those references become
+    /// unresolvable, and `patal_pattern` reports that loudly when a project
+    /// is loaded rather than silently dropping the material from the piece.
+    pub fn remove(&mut self, id: MaterialId) -> Option<Material> {
+        let index = self.materials.iter().position(|m| m.id == id)?;
+        Some(self.materials.remove(index))
+    }
+
+    /// Convenience lookup for human-facing search. Ambiguous by nature —
+    /// two materials may share a name — so it returns the first match and
+    /// should not be used to establish a reference.
     pub fn find_by_name(&self, name: &str) -> Option<&Material> {
         self.materials.iter().find(|m| m.name == name)
     }
@@ -154,6 +228,58 @@ mod tests {
     fn find_by_name_missing_returns_none() {
         let lib = MaterialLibrary::new();
         assert!(lib.find_by_name("Denim").is_none());
+    }
+
+    #[test]
+    fn two_materials_with_the_same_name_are_not_the_same_material() {
+        // Names are not identity. A studio can stock two cotton poplins from
+        // different mills, and a piece cut from one must not follow an edit
+        // to the other.
+        let a = Material::new("Cotton Poplin");
+        let b = Material::new("Cotton Poplin");
+        assert_ne!(a.id(), b.id());
+    }
+
+    #[test]
+    fn add_returns_the_id_needed_to_reference_it() {
+        let mut lib = MaterialLibrary::new();
+        let denim = Material::new("Denim");
+        let expected = denim.id();
+
+        let id = lib.add(denim);
+        assert_eq!(id, expected);
+        assert_eq!(lib.find_by_id(id).map(|m| m.name.as_str()), Some("Denim"));
+    }
+
+    #[test]
+    fn remove_takes_the_material_out_by_identity() {
+        let mut lib = MaterialLibrary::new();
+        let denim = lib.add(Material::new("Denim"));
+        let silk = lib.add(Material::new("Silk"));
+
+        assert_eq!(lib.remove(denim).map(|m| m.name), Some("Denim".to_string()));
+        assert_eq!(lib.len(), 1);
+        assert!(lib.find_by_id(denim).is_none());
+        assert!(lib.find_by_id(silk).is_some());
+        assert!(
+            lib.remove(denim).is_none(),
+            "removing twice is not an error"
+        );
+    }
+
+    #[test]
+    fn an_id_survives_a_round_trip_as_a_plain_uuid_string() {
+        // The wire form Swift's Foundation.UUID also produces, so the two
+        // sides agree on identity by construction rather than convention.
+        let material = Material::new("Denim");
+        let json = serde_json::to_string(&material).unwrap();
+        assert!(
+            json.contains(&format!(r#""id":"{}""#, material.id())),
+            "{json}"
+        );
+
+        let restored: Material = serde_json::from_str(&json).unwrap();
+        assert_eq!(restored.id(), material.id());
     }
 
     #[test]

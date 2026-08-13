@@ -13,8 +13,21 @@
 use std::fmt;
 
 use patal_geometry::{GeometryError, PatternBoundary};
-use patal_materials::Material;
+use patal_materials::{Material, MaterialId, MaterialLibrary};
 use serde::{Deserialize, Serialize};
+
+/// The document schema this build writes and understands.
+///
+/// Bumped when the shape of a saved project changes incompatibly. It is
+/// here from the start because retrofitting a version field onto files that
+/// already exist means guessing what version an unversioned file was — and
+/// the cost of carrying it before it is needed is one integer.
+///
+/// It is *not* here because the format is being settled forever. Grading,
+/// darts, notches, grainlines and the constraint solver are all unbuilt, so
+/// version 2 is close to certain. That is the situation this field exists
+/// for, not an argument against it.
+pub const SCHEMA_VERSION: u32 = 1;
 
 /// Everything that can go wrong assembling a pattern.
 #[derive(Debug, Clone, PartialEq)]
@@ -25,6 +38,14 @@ pub enum PatternError {
     InvalidSeamAllowance { value_mm: f64 },
     /// The underlying geometry could not produce a cut line.
     Geometry(GeometryError),
+    /// A piece references a material that is not in the project's library.
+    ///
+    /// Loudly, rather than quietly becoming `None`: a piece that silently
+    /// forgets its material is a piece that gets cut from the wrong cloth,
+    /// and the person who finds out is the person holding the scissors.
+    MaterialNotFound { piece: String, id: MaterialId },
+    /// A document written by a newer build than this one.
+    UnsupportedSchemaVersion { found: u32, supported: u32 },
 }
 
 impl fmt::Display for PatternError {
@@ -35,6 +56,15 @@ impl fmt::Display for PatternError {
                 "seam allowance {value_mm}mm must be finite and non-negative"
             ),
             Self::Geometry(err) => write!(f, "{err}"),
+            Self::MaterialNotFound { piece, id } => write!(
+                f,
+                "piece \"{piece}\" references material {id}, which is not in this project"
+            ),
+            Self::UnsupportedSchemaVersion { found, supported } => write!(
+                f,
+                "this document is schema version {found}; this build understands \
+                 version {supported}. It was written by a newer version of Pātāl."
+            ),
         }
     }
 }
@@ -43,7 +73,9 @@ impl std::error::Error for PatternError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
             Self::Geometry(err) => Some(err),
-            Self::InvalidSeamAllowance { .. } => None,
+            Self::InvalidSeamAllowance { .. }
+            | Self::MaterialNotFound { .. }
+            | Self::UnsupportedSchemaVersion { .. } => None,
         }
     }
 }
@@ -77,7 +109,14 @@ pub struct PatternPiece {
     pub name: String,
     pub boundary: PatternBoundary,
     seam_allowance_mm: f64,
-    pub material: Option<Material>,
+    /// A *reference* to a material in the project's library, not a copy.
+    ///
+    /// This used to be an `Option<Material>`, which embedded a snapshot: an
+    /// edit to a library material left every piece holding a stale
+    /// duplicate, so the shareable studio libraries the memorandum
+    /// describes would have silently diverged from the pieces cut with
+    /// them. Resolve it through [`Project::material_for`].
+    pub material: Option<MaterialId>,
 }
 
 /// The wire shape of a [`PatternPiece`] — everything the constructor plus
@@ -87,7 +126,7 @@ struct PatternPieceData {
     name: String,
     boundary: PatternBoundary,
     seam_allowance_mm: f64,
-    material: Option<Material>,
+    material: Option<MaterialId>,
 }
 
 impl TryFrom<PatternPieceData> for PatternPiece {
@@ -155,10 +194,54 @@ impl PatternPiece {
 /// already validates itself on deserialization, so a plain derive here is
 /// enough; `Project` doesn't need to re-check what its elements guarantee.
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
+#[serde(try_from = "ProjectData", into = "ProjectData")]
 pub struct Project {
     pub name: String,
     pub pieces: Vec<PatternPiece>,
     pub measurements: Vec<Measurement>,
+    /// The project owns its materials. A piece references one by id, so
+    /// editing a material here is immediately true for every piece using
+    /// it, which is the whole point of the change away from embedded
+    /// copies.
+    pub materials: MaterialLibrary,
+}
+
+/// The wire shape of a [`Project`]. Identical to the type — the validation
+/// is not about the fields, it is about whether the references between them
+/// resolve.
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
+struct ProjectData {
+    name: String,
+    pieces: Vec<PatternPiece>,
+    measurements: Vec<Measurement>,
+    #[serde(default)]
+    materials: MaterialLibrary,
+}
+
+impl From<Project> for ProjectData {
+    fn from(project: Project) -> Self {
+        Self {
+            name: project.name,
+            pieces: project.pieces,
+            measurements: project.measurements,
+            materials: project.materials,
+        }
+    }
+}
+
+impl TryFrom<ProjectData> for Project {
+    type Error = PatternError;
+
+    fn try_from(data: ProjectData) -> Result<Self, Self::Error> {
+        let project = Project {
+            name: data.name,
+            pieces: data.pieces,
+            measurements: data.measurements,
+            materials: data.materials,
+        };
+        project.check_material_references()?;
+        Ok(project)
+    }
 }
 
 impl Project {
@@ -167,7 +250,38 @@ impl Project {
             name: name.into(),
             pieces: Vec::new(),
             measurements: Vec::new(),
+            materials: MaterialLibrary::new(),
         }
+    }
+
+    /// The material a piece will be cut from, resolved against this
+    /// project's library.
+    ///
+    /// `Ok(None)` means the piece genuinely has no material assigned yet,
+    /// which is a normal state while designing. An unresolvable reference
+    /// is an error, never `None` — those two situations look identical to a
+    /// caller that conflates them, and only one of them is fine.
+    pub fn material_for(&self, piece: &PatternPiece) -> Result<Option<&Material>, PatternError> {
+        let Some(id) = piece.material else {
+            return Ok(None);
+        };
+        self.materials
+            .find_by_id(id)
+            .map(Some)
+            .ok_or_else(|| PatternError::MaterialNotFound {
+                piece: piece.name.clone(),
+                id,
+            })
+    }
+
+    /// Verifies every piece's material reference resolves. Run automatically
+    /// on deserialization, and available directly for a caller that has just
+    /// removed a material and wants to know what it broke.
+    pub fn check_material_references(&self) -> Result<(), PatternError> {
+        for piece in &self.pieces {
+            self.material_for(piece)?;
+        }
+        Ok(())
     }
 
     pub fn add_piece(&mut self, piece: PatternPiece) {
@@ -197,6 +311,73 @@ impl Project {
 
     pub fn total_perimeter_mm(&self) -> f64 {
         self.pieces.iter().map(|p| p.boundary.perimeter()).sum()
+    }
+}
+
+/// A project plus the version of the schema it was written against — what a
+/// `.patal` file contains.
+///
+/// The envelope is separate from [`Project`] so that the version is readable
+/// before anything else is interpreted. A loader that has to parse the whole
+/// project to discover it cannot read a version it does not understand well
+/// enough to refuse it.
+///
+/// This deliberately carries no file I/O. Reading and writing bytes, atomic
+/// replacement, and what happens to a half-written file are a separate
+/// concern from what a document *is*, and are not built yet.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(try_from = "DocumentData", into = "DocumentData")]
+pub struct Document {
+    schema_version: u32,
+    pub project: Project,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct DocumentData {
+    schema_version: u32,
+    project: Project,
+}
+
+impl From<Document> for DocumentData {
+    fn from(document: Document) -> Self {
+        Self {
+            schema_version: document.schema_version,
+            project: document.project,
+        }
+    }
+}
+
+impl TryFrom<DocumentData> for Document {
+    type Error = PatternError;
+
+    fn try_from(data: DocumentData) -> Result<Self, Self::Error> {
+        if data.schema_version != SCHEMA_VERSION {
+            return Err(PatternError::UnsupportedSchemaVersion {
+                found: data.schema_version,
+                supported: SCHEMA_VERSION,
+            });
+        }
+        Ok(Self {
+            schema_version: data.schema_version,
+            project: data.project,
+        })
+    }
+}
+
+impl Document {
+    /// Wraps a project at the current schema version.
+    pub fn new(project: Project) -> Self {
+        Self {
+            schema_version: SCHEMA_VERSION,
+            project,
+        }
+    }
+
+    /// Private field with no setter: a document's version describes the
+    /// shape it was written in, so letting a caller assign it would let
+    /// them claim a shape they did not produce.
+    pub fn schema_version(&self) -> u32 {
+        self.schema_version
     }
 }
 
@@ -258,13 +439,141 @@ mod tests {
     #[test]
     fn project_tracks_pieces_and_material() {
         let mut project = Project::new("Wrap Dress");
+        let silk = project.materials.add(Material::new("Silk Charmeuse"));
+
         let mut piece = PatternPiece::new("Skirt Panel", square_boundary(300.0));
-        piece.material = Some(Material::new("Silk Charmeuse"));
+        piece.material = Some(silk);
         project.add_piece(piece);
 
         let found = project.find_piece("Skirt Panel").expect("piece exists");
-        assert_eq!(found.material.as_ref().unwrap().name, "Silk Charmeuse");
+        let material = project
+            .material_for(found)
+            .expect("reference resolves")
+            .expect("a material is assigned");
+        assert_eq!(material.name, "Silk Charmeuse");
         assert_eq!(project.total_perimeter_mm(), 1200.0);
+    }
+
+    #[test]
+    fn editing_a_library_material_reaches_every_piece_using_it() {
+        // The modelling flaw this change exists to fix. PatternPiece.material
+        // used to be an embedded Option<Material>, so editing the library
+        // left every piece holding a stale copy — and the memorandum's
+        // shareable studio libraries would have silently disagreed with the
+        // pieces cut from them.
+        let mut project = Project::new("Wrap Dress");
+        let silk = project.materials.add(Material::new("Silk Charmeuse"));
+
+        let mut piece = PatternPiece::new("Skirt Panel", square_boundary(300.0));
+        piece.material = Some(silk);
+        project.add_piece(piece);
+
+        project
+            .materials
+            .find_by_id_mut(silk)
+            .expect("in the library")
+            .weight_gsm = Some(90.0);
+
+        let piece = project.find_piece("Skirt Panel").unwrap();
+        let seen = project.material_for(piece).unwrap().unwrap();
+        assert_eq!(
+            seen.weight_gsm,
+            Some(90.0),
+            "the piece must see the edit, not a snapshot taken when it was assigned"
+        );
+    }
+
+    #[test]
+    fn removing_a_material_leaves_a_reference_that_reports_itself() {
+        let mut project = Project::new("Wrap Dress");
+        let silk = project.materials.add(Material::new("Silk Charmeuse"));
+        let mut piece = PatternPiece::new("Skirt Panel", square_boundary(300.0));
+        piece.material = Some(silk);
+        project.add_piece(piece);
+
+        assert!(project.check_material_references().is_ok());
+        assert_eq!(
+            project.materials.remove(silk).map(|m| m.name),
+            Some("Silk Charmeuse".to_string())
+        );
+
+        // Not silently dropped from the piece, and not silently None.
+        assert!(matches!(
+            project.check_material_references(),
+            Err(PatternError::MaterialNotFound { .. })
+        ));
+
+        // Adding a material back under the same name does not re-link it.
+        // Identity is what binds a piece to its cloth, not a string.
+        project.materials.add(Material::new("Silk Charmeuse"));
+        assert!(project.check_material_references().is_err());
+    }
+
+    #[test]
+    fn an_unresolvable_material_reference_is_an_error_not_a_none() {
+        let mut project = Project::new("Wrap Dress");
+        let orphan = Material::new("Never Added").id();
+
+        let mut piece = PatternPiece::new("Skirt Panel", square_boundary(300.0));
+        piece.material = Some(orphan);
+        project.add_piece(piece);
+
+        match project.check_material_references() {
+            Err(PatternError::MaterialNotFound { piece, id }) => {
+                assert_eq!(piece, "Skirt Panel");
+                assert_eq!(id, orphan);
+            }
+            other => panic!("expected MaterialNotFound, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn a_piece_with_no_material_resolves_to_none_not_an_error() {
+        let mut project = Project::new("Wrap Dress");
+        project.add_piece(PatternPiece::new("Skirt Panel", square_boundary(300.0)));
+        let piece = project.find_piece("Skirt Panel").unwrap();
+        assert!(project.material_for(piece).unwrap().is_none());
+    }
+
+    #[test]
+    fn a_project_with_a_dangling_reference_cannot_be_deserialized() {
+        let mut project = Project::new("Wrap Dress");
+        let silk = project.materials.add(Material::new("Silk Charmeuse"));
+        let mut piece = PatternPiece::new("Skirt Panel", square_boundary(300.0));
+        piece.material = Some(silk);
+        project.add_piece(piece);
+
+        let json = serde_json::to_string(&project).unwrap();
+        // Empty the library, leaving the piece pointing at nothing.
+        let broken = json.replace(&serde_json::to_string(&project.materials).unwrap(), "[]");
+        let err = serde_json::from_str::<Project>(&broken).unwrap_err();
+        assert!(
+            err.to_string().contains("which is not in this project"),
+            "{err}"
+        );
+    }
+
+    #[test]
+    fn a_document_carries_its_schema_version() {
+        let document = Document::new(Project::new("Wrap Dress"));
+        assert_eq!(document.schema_version(), SCHEMA_VERSION);
+
+        let json = serde_json::to_string(&document).unwrap();
+        assert!(json.contains("\"schema_version\":1"), "{json}");
+
+        let restored: Document = serde_json::from_str(&json).unwrap();
+        assert_eq!(restored.project.name, "Wrap Dress");
+    }
+
+    #[test]
+    fn a_document_from_the_future_is_refused_with_a_readable_message() {
+        let json = r#"{"schema_version":99,"project":{"name":"X","pieces":[],
+                       "measurements":[],"materials":[]}}"#;
+        let err = serde_json::from_str::<Document>(json).unwrap_err();
+        assert!(
+            err.to_string().contains("written by a newer version"),
+            "a version we cannot read must say so plainly: {err}"
+        );
     }
 
     #[test]
@@ -294,7 +603,8 @@ mod tests {
     fn pattern_piece_round_trips_through_json() {
         let mut piece = PatternPiece::new("Front Bodice", square_boundary(200.0));
         piece.set_seam_allowance_mm(12.5).unwrap();
-        piece.material = Some(Material::new("Silk Charmeuse"));
+        let silk = Material::new("Silk Charmeuse");
+        piece.material = Some(silk.id());
 
         let json = serde_json::to_string(&piece).unwrap();
         let restored: PatternPiece = serde_json::from_str(&json).unwrap();
@@ -302,7 +612,7 @@ mod tests {
         assert_eq!(restored.name, piece.name);
         assert_eq!(restored.boundary, piece.boundary);
         assert_eq!(restored.seam_allowance_mm(), 12.5);
-        assert_eq!(restored.material.as_ref().unwrap().name, "Silk Charmeuse");
+        assert_eq!(restored.material, Some(silk.id()));
     }
 
     #[test]
@@ -326,9 +636,10 @@ mod tests {
     #[test]
     fn project_round_trips_through_json_including_nested_validation() {
         let mut project = Project::new("Wrap Dress");
+        let silk = project.materials.add(Material::new("Silk Charmeuse"));
         let mut piece = PatternPiece::new("Skirt Panel", square_boundary(300.0));
         piece.set_seam_allowance_mm(15.0).unwrap();
-        piece.material = Some(Material::new("Silk Charmeuse"));
+        piece.material = Some(silk);
         project.add_piece(piece);
         project.set_measurement("waist", 700.0);
 

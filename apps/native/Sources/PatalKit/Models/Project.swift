@@ -34,7 +34,11 @@ public struct PatternPiece: Identifiable, Equatable, Sendable {
     public var name: String
     public var boundary: PatternBoundary
     private var storedSeamAllowanceMM: Double
-    public var material: Material?
+    /// A *reference* to a material in the project's library, not a copy —
+    /// mirroring `patal_pattern::PatternPiece.material`, which is an
+    /// `Option<MaterialId>` for the same reason: an embedded copy goes stale
+    /// the moment the library material is edited.
+    public var material: UUID?
 
     /// A 10mm (1cm) seam allowance is the default starting point — a
     /// common industry convention, freely overridable per piece.
@@ -47,7 +51,7 @@ public struct PatternPiece: Identifiable, Equatable, Sendable {
         name: String,
         boundary: PatternBoundary,
         seamAllowanceMM: Double = PatternPiece.defaultSeamAllowanceMM,
-        material: Material? = nil
+        material: UUID? = nil
     ) throws {
         self.id = id
         self.name = name
@@ -76,13 +80,17 @@ public struct PatternPiece: Identifiable, Equatable, Sendable {
 }
 
 extension PatternPiece: Codable {
-    // This document shape is for Swift-to-Swift round-tripping only (local
-    // persistence, in-memory undo snapshots) — it does not yet match the
-    // Rust engine's wire format, because `id` has no counterpart on the
-    // Rust side. Reconciling that is the identity-model gap the README
-    // calls out; not attempted here.
+    // Still Swift-to-Swift only, and for one remaining reason: `id` has no
+    // counterpart on the Rust side, where `PatternPiece` has no identity
+    // field at all. `Material`'s half of that gap is closed — its id is now
+    // the engine's `MaterialId` — so what is left is giving pieces the same
+    // treatment. Until then the key below is spelled the way the engine
+    // would spell it, so closing the gap is a Rust-side addition rather than
+    // another rename here.
     private enum CodingKeys: String, CodingKey {
-        case id, name, boundary, seamAllowanceMM, material
+        case id, name, boundary
+        case seamAllowanceMM = "seam_allowance_mm"
+        case material
     }
 
     public init(from decoder: Decoder) throws {
@@ -92,7 +100,7 @@ extension PatternPiece: Codable {
             name: container.decode(String.self, forKey: .name),
             boundary: container.decode(PatternBoundary.self, forKey: .boundary),
             seamAllowanceMM: container.decode(Double.self, forKey: .seamAllowanceMM),
-            material: container.decodeIfPresent(Material.self, forKey: .material)
+            material: container.decodeIfPresent(UUID.self, forKey: .material)
         )
     }
 
