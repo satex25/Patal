@@ -3,7 +3,7 @@
 Pātāl (पाताल) — in Hindu cosmology, the netherworld: one of the seven realms
 beneath the earth, vast and richly structured, built downward from a surface
 few ever see. Formerly named *Patruin* (Irish "patrún," pattern); renamed
-2026-08-07 — see ADR-002 (Naming Convention) in the project vault.
+2026-08-07 — see [ADR-002](docs/adr/ADR-002-naming-convention.md).
 
 A professional garment pattern creation platform: from idea to production-ready pattern in
 one workspace, across iPhone, iPad, Mac, and Windows.
@@ -22,13 +22,13 @@ One Rust engine, two front ends:
 patal/
 ├── engine/                 Rust workspace — platform-agnostic core
 │   └── crates/
-│       ├── geometry/       patal-geometry  — Point2, PatternBoundary, seam-allowance offset
+│       ├── geometry/       patal-geometry  — Point2, PatternBoundary, offset, SeamPath curves
 │       ├── materials/      patal-materials — Material, MaterialLibrary
 │       ├── pattern/        patal-pattern   — PatternPiece, Project, measurements
 │       └── ffi/            patal-ffi       — uniffi bindings exposed to Swift
 ├── apps/
 │   ├── native/              SwiftUI — iPhone, iPad, Mac (one shared codebase)
-│   └── desktop/              Tauri (Rust + Tailwind) — Windows build for satex25.co
+│   └── desktop/              Tauri — engineering harness, NOT a shipping target (ADR-005)
 └── docs/
     └── memorandum.md
 ```
@@ -64,8 +64,13 @@ This is a foundation, not a product yet. What's real today, and what isn't:
   which two edges cross, so a UI can point at the problem rather than only
   naming it. `PatternPiece` and `Project` sit on top with the same
   discipline: `seam_allowance_mm` is validated, not a bare public field.
-  52 unit tests passing (`cargo test --workspace` inside `engine/`),
-  `cargo clippy --workspace --all-targets -- -D warnings` clean.
+  Curves live in a layer *above* the polygon kernel — `SeamPath` and
+  `EdgeSegment` are authored, `flatten` discretizes them, and the kernel is
+  untouched ([ADR-003](docs/adr/ADR-003-curve-representation.md)). Materials
+  have stable identity and a project carries a document schema version
+  ([ADR-004](docs/adr/ADR-004-document-format.md)). 89 unit tests plus a
+  property suite and a closed-form curve oracle, `cargo clippy --workspace
+  --all-targets -- -D warnings` clean, `cargo deny` clean on all four checks.
 - `patal-ffi`: exports the engine's fallible boundary operations
   (perimeter, offset) across the uniffi boundary as `Result`, not as NaN —
   a caller on the other side gets a real error, not a number it has to
@@ -83,12 +88,16 @@ This is a foundation, not a product yet. What's real today, and what isn't:
   gets cut. See the note below. Never built or tested in this environment —
   there is no macOS toolchain here, and CI's `native` job is the only
   `swift build` this code has ever had.
-- `apps/desktop`: a Tauri app whose Rust backend links `patal-geometry`
-  and `patal-pattern` directly (no FFI boundary — both are Rust) and
-  exposes one command, `engine_demo_perimeter_mm`, that a Tailwind-styled
-  placeholder screen calls and displays or reports as an error. This does
-  demonstrate the desktop shell reaching the real, hardened engine; it does
-  not yet exercise the engine's harder paths (offset, validation failures).
+- `apps/desktop`: **an engineering harness, not a product.**
+  [ADR-001](docs/adr/ADR-001-stack-selection.md) rejected Tauri as a shipping
+  target and that stands; [ADR-005](docs/adr/ADR-005-tauri-as-engineering-harness.md)
+  explains why it is unfrozen for development anyway. It links the engine
+  crates directly with no FFI boundary, and it is the only thing in this repo
+  that runs on the Windows machine Pātāl is developed on. It draws a bodice
+  front with live tolerance and seam-allowance sliders, reports per-frame cost
+  against a 120Hz budget, shows the engine's refusals verbatim when an
+  allowance exceeds what the curvature can give, and writes a real `.patal`
+  file and reads it back. Disposable by design.
 
 **There is now one implementation of the cut path, not two.** `PatalKit`
 used to carry a hand-ported copy of the offset kernel — same mitre limit,
@@ -108,18 +117,22 @@ Swift-to-Swift only — unlike `PatternBoundary`'s, which matches the Rust
 wire format exactly.
 
 What's deliberately not started: the parametric propagation/constraint
-solver (patterns as "a living system" where edits propagate), a document
-layer that can save and load a `Project` to disk, manufacturing export
-(DXF/AAMA, tiled PDF at true scale), grading, the AI collaborator layer,
-and any visual identity (colors/type).
+solver (patterns as "a living system" where edits propagate), **export**
+(DXF-AAMA/ASTM, tiled PDF at true scale), **grading**, the AI collaborator
+layer, and any visual identity (colors/type).
 
-Note that the serialization *primitives* are done, contrary to what this
-file used to claim: every domain type in `engine/` derives `Serialize` and
-`Deserialize`, with passing JSON round-trip tests, and `PatternBoundary`
-routes deserialization through its validating constructor via
-`#[serde(try_from)]`. What is missing is the document envelope around them
-— a schema version, atomic save/load, and the file format itself — not the
-serde work.
+Export and grading deserve a sentence rather than a bullet, because they are
+the two capabilities that make this a pattern CAD application and neither is
+in any current plan. Both are pure Rust, both run on Windows with no Mac, and
+both are testable headlessly. Export is also the cheapest route to real
+validation there is: print a tiled PDF at true scale and hand it to a pattern
+maker.
+
+Persistence exists as a *format*, not as file I/O. Every domain type derives
+`Serialize`/`Deserialize`, `Document` carries a `schema_version`, and
+material references are checked on load. What the engine does not do is touch
+the disk — no atomic write, no save/load API. The harness does that today, in
+disposable code.
 
 ## Getting started
 
