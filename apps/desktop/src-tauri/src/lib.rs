@@ -182,6 +182,14 @@ fn save_demo_document(directory: String, tolerance_mm: f64) -> Result<SaveReport
     })
 }
 
+#[cfg_attr(mobile, tauri::mobile_entry_point)]
+pub fn run() {
+    tauri::Builder::default()
+        .invoke_handler(tauri::generate_handler![cut_preview, save_demo_document])
+        .run(tauri::generate_context!())
+        .expect("error while running tauri application");
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -227,14 +235,6 @@ mod tests {
         );
         assert_eq!(report.material_name.as_deref(), Some("Wool Crepe"));
 
-        let _ = fs::remove_file(PathBuf::from(directory).join("harness-demo.patal"));
+        let _ = fs::remove_file(directory.join("harness-demo.patal"));
     }
-}
-
-#[cfg_attr(mobile, tauri::mobile_entry_point)]
-pub fn run() {
-    tauri::Builder::default()
-        .invoke_handler(tauri::generate_handler![cut_preview, save_demo_document])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
 }
