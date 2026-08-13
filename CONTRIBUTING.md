@@ -62,6 +62,18 @@ Two things that are easy to forget:
 `cargo deny check advisories` is deliberately *not* in the blocking set — it
 runs weekly on a schedule instead. Run it when you touch dependencies.
 
+The property suite in `engine/crates/geometry/tests/properties.rs` runs 256
+cases per property by default. Before merging anything that touches the
+kernel, give it a real sweep:
+
+```sh
+PROPTEST_CASES=100000 cmd //c 'scripts\cargo.bat test --locked -p patal-geometry --test properties'
+```
+
+Export it from your shell rather than using `set VAR=x && ...` inside
+`cmd //c` — that form does not reach the test process, and the suite will
+silently run 256 cases while looking like it ran 100,000.
+
 ## Architectural constraints
 
 These are recorded as ADRs in [`docs/adr/`](docs/adr/) and are not

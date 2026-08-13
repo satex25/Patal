@@ -1,0 +1,9 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc 4029562efac56c31b2b8a1d219f703f89a5b8af2c9b399efba3790dc4682e3a9 # shrinks to soup = [Point2 { x: 0.0, y: 0.0 }, Point2 { x: 0.0, y: -360.6792666362587 }, Point2 { x: 0.0, y: -308.2077122852838 }], distance = NaN
+cc 19356848cc9b73bd27aa3ac2ec72922e7da72d7edcde5e204a9fcaea9ace26ce # shrinks to soup = [Point2 { x: 0.0, y: 0.0 }, Point2 { x: 0.0, y: 650.9293577004972 }, Point2 { x: 930.1490528904313, y: -614.982404750005 }, Point2 { x: -5.6951859114877726e199, y: 4.835276609182166e199 }], distance = 0.0
+cc 3334a5042ff59d1ad3debfb771006676b220dd8898986ec644b0801d20b377c9 # shrinks to soup = [Point2 { x: 0.0, y: 0.0 }, Point2 { x: 0.0, y: -704.1351160233529 }, Point2 { x: 0.0, y: -4.435713860083833e199 }]

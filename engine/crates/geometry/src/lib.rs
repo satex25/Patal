@@ -772,10 +772,12 @@ mod tests {
         // its two walls cross. Both conditions trip together for a
         // rectangular slot, and the direction check is tested first.
         //
-        // This matters because `OffsetSelfIntersects` documents itself as
-        // "the classic dart/notch failure" — and the classic dart/notch
-        // failure does not reach it. Whether any input does is an open
-        // question the proptest suite is the right tool to settle.
+        // This looked at first like evidence that the crossing branch might
+        // be unreachable. It is not: a V-shaped notch — a dart apex —
+        // separates the two thresholds and does reach it, because the apex
+        // is a vertex rather than a short edge, so nothing reverses. See
+        // `a_dart_apex_reaches_the_self_intersection_branch` in
+        // tests/properties.rs. It is the dart, not the notch, that crosses.
         let slotted = PatternBoundary::new(vec![
             Point2::new(0.0, 0.0),
             Point2::new(100.0, 0.0),
