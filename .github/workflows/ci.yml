@@ -29,7 +29,7 @@ jobs:
       - name: Resolve pinned toolchain
         run: rustup show
 
-      - uses: actions/cache@v4
+      - uses: actions/cache@v5
         with:
           path: |
             ~/.cargo/registry
@@ -97,7 +97,7 @@ jobs:
       - name: Resolve pinned toolchain
         run: rustup show
 
-      - uses: actions/cache@v4
+      - uses: actions/cache@v5
         with:
           path: |
             ~/.cargo/registry
@@ -124,7 +124,7 @@ jobs:
       - name: Resolve pinned toolchain
         run: rustup show
 
-      - uses: actions/cache@v4
+      - uses: actions/cache@v5
         with:
           path: |
             ~/.cargo/registry
@@ -144,7 +144,7 @@ jobs:
         working-directory: apps/desktop/src-tauri
         run: cargo test --locked
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version-file: apps/desktop/.nvmrc
           cache: npm
