@@ -33,8 +33,16 @@ patal/
 ├── apps/
 │   ├── native/              SwiftUI — iPhone, iPad, Mac (one shared codebase)
 │   └── desktop/              Tauri — engineering harness, NOT a shipping target (ADR-005)
-└── docs/
-    └── memorandum.md
+├── docs/                    all project documentation — start at docs/README.md
+│   ├── status.md            where the work is; the single source of truth
+│   ├── roadmap.md           the pillars not built yet
+│   ├── memorandum.md        the founding vision document
+│   ├── adr/                 decision records the code must obey
+│   ├── setup/               toolchain and reference-repository notes
+│   ├── analysis/            audits of the codebase as found
+│   └── plans/               dated session plans and execution blueprints
+├── scripts/                 cargo.bat — use it, see CONTRIBUTING.md
+└── reference/               vendored upstream clones, git-ignored (docs/setup/)
 ```
 
 **Why this split:** the memorandum's "Pattern Engine" and "Material System"

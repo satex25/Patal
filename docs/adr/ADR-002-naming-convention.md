@@ -76,6 +76,13 @@ The **code** workspace must use the ASCII form.
 repository, branch `master`) — fully ASCII, not even nested under the vault's
 diacritic parent, satisfying this rule with margin to spare.
 
+**Superseded 2026-08-13:** there is no separate vault path any more. The notes were
+folded into `docs/` in this repository, so the only location on disk is the ASCII
+`C:\Users\User\patal\`. `C:\Users\User\Desktop\patal` is a directory junction pointing
+at it, not a second copy — also ASCII. The rule now has nothing left to constrain: no
+path in the project carries a diacritic. Display form survives only in prose and in
+the product name itself, which is exactly where this ADR wanted it.
+
 ## Bundle identifiers — resolved 2026-08-07
 
 This ADR previously specified `com.patal.app` while the shipped

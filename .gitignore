@@ -20,6 +20,12 @@ DerivedData/
 # Editors
 .vscode/
 .idea/
+.obsidian/
 
 # Local worktrees
 .worktrees/
+
+# Vendored upstream clones, read-only prior art. Each carries its own .git, so
+# committing them would record broken gitlinks rather than files. See
+# docs/setup/reference-repositories.md for what they are and how to re-clone.
+/reference/
