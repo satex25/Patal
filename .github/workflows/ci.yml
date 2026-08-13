@@ -137,6 +137,13 @@ jobs:
         working-directory: apps/desktop/src-tauri
         run: cargo clippy --all-targets --locked -- -D warnings
 
+      # The harness has real tests now — it writes a .patal file to disk and
+      # reads it back, which is the only place in the repo that exercises the
+      # document format through an actual file.
+      - name: cargo test
+        working-directory: apps/desktop/src-tauri
+        run: cargo test --locked
+
       - uses: actions/setup-node@v4
         with:
           node-version-file: apps/desktop/.nvmrc

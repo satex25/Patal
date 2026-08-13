@@ -4,26 +4,101 @@
     <meta charset="UTF-8" />
     <link rel="stylesheet" href="/src/styles.css" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Pātāl</title>
+    <title>Pātāl — engineering harness</title>
     <script type="module" src="/src/main.ts" defer></script>
   </head>
 
   <body class="min-h-screen bg-neutral-50 text-neutral-900 dark:bg-neutral-950 dark:text-neutral-50">
-    <main class="mx-auto flex min-h-screen max-w-md flex-col items-center justify-center gap-6 px-6 text-center">
-      <h1 class="text-2xl font-semibold tracking-tight">Pātāl</h1>
-      <p class="text-sm text-neutral-500 dark:text-neutral-400">
-        Windows &amp; Mac desktop shell. This screen exists to prove the
-        Tauri front end can call into the shared Rust engine — real product
-        UI hasn't been built yet.
-      </p>
-      <button
-        id="engine-demo-button"
-        type="button"
-        class="rounded-md bg-neutral-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-neutral-700 dark:bg-neutral-100 dark:text-neutral-900 dark:hover:bg-neutral-300"
-      >
-        Run engine demo
-      </button>
-      <p id="engine-demo-result" class="text-sm"></p>
+    <main class="mx-auto flex min-h-screen max-w-5xl flex-col gap-6 px-6 py-8">
+      <header class="flex flex-col gap-1">
+        <h1 class="text-2xl font-semibold tracking-tight">Pātāl — engineering harness</h1>
+        <p class="text-sm text-neutral-500 dark:text-neutral-400">
+          Not the product. This is a disposable window onto the Rust engine —
+          the only thing in this repo that runs on a Windows machine, and the
+          only way to look at a seam allowance with your eyes instead of
+          reading it out of a test assertion. See ADR-005.
+        </p>
+      </header>
+
+      <div class="grid gap-6 md:grid-cols-[1fr_18rem]">
+        <section
+          class="rounded-lg border border-neutral-200 bg-white p-3 dark:border-neutral-800 dark:bg-neutral-900"
+        >
+          <canvas id="canvas" class="h-full w-full" width="900" height="620"></canvas>
+        </section>
+
+        <aside class="flex flex-col gap-5 text-sm">
+          <div class="flex flex-col gap-2">
+            <label for="tolerance" class="flex justify-between font-medium">
+              <span>Flattening tolerance</span>
+              <span id="tolerance-value" class="tabular-nums text-neutral-500">0.400 mm</span>
+            </label>
+            <input
+              id="tolerance"
+              type="range"
+              min="-3"
+              max="0.7"
+              step="0.01"
+              value="-0.398"
+              class="w-full"
+            />
+            <p class="text-xs text-neutral-500 dark:text-neutral-400">
+              An industrial cutter works to about 0.4mm. Anything finer is
+              spent on the screen, not on the garment.
+            </p>
+          </div>
+
+          <div class="flex flex-col gap-2">
+            <label for="allowance" class="flex justify-between font-medium">
+              <span>Seam allowance</span>
+              <span id="allowance-value" class="tabular-nums text-neutral-500">10.0 mm</span>
+            </label>
+            <input
+              id="allowance"
+              type="range"
+              min="-30"
+              max="40"
+              step="0.5"
+              value="10"
+              class="w-full"
+            />
+            <p class="text-xs text-neutral-500 dark:text-neutral-400">
+              Drag it negative to inset. Push it far enough and the engine
+              refuses — that refusal is the point, not a bug.
+            </p>
+          </div>
+
+          <dl class="grid grid-cols-2 gap-x-3 gap-y-1 tabular-nums">
+            <dt class="text-neutral-500 dark:text-neutral-400">Vertices</dt>
+            <dd id="stat-vertices">—</dd>
+            <dt class="text-neutral-500 dark:text-neutral-400">Per frame</dt>
+            <dd id="stat-time">—</dd>
+            <dt class="text-neutral-500 dark:text-neutral-400">Frame budget</dt>
+            <dd id="stat-budget">—</dd>
+          </dl>
+
+          <p
+            id="engine-error"
+            class="hidden rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-200"
+          ></p>
+
+          <div class="flex flex-col gap-2 border-t border-neutral-200 pt-4 dark:border-neutral-800">
+            <button
+              id="save-button"
+              type="button"
+              class="rounded-md bg-neutral-900 px-3 py-2 text-sm font-medium text-white transition hover:bg-neutral-700 dark:bg-neutral-100 dark:text-neutral-900 dark:hover:bg-neutral-300"
+            >
+              Write a .patal file and read it back
+            </button>
+            <p id="save-result" class="text-xs text-neutral-500 dark:text-neutral-400"></p>
+          </div>
+
+          <ul class="flex flex-col gap-1 border-t border-neutral-200 pt-4 text-xs dark:border-neutral-800">
+            <li><span class="inline-block h-2 w-4 bg-neutral-400 align-middle"></span> sewing line (flattened)</li>
+            <li><span class="inline-block h-2 w-4 bg-sky-500 align-middle"></span> cut line (offset)</li>
+          </ul>
+        </aside>
+      </div>
     </main>
   </body>
 </html>

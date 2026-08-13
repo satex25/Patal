@@ -2069,6 +2069,7 @@ name = "patal-desktop"
 version = "0.1.0"
 dependencies = [
  "patal-geometry",
+ "patal-materials",
  "patal-pattern",
  "serde",
  "serde_json",
