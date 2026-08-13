@@ -28,7 +28,8 @@ patal/
 │   └── crates/
 │       ├── geometry/       patal-geometry  — Point2, PatternBoundary, offset, SeamPath curves
 │       ├── materials/      patal-materials — Material, MaterialLibrary
-│       ├── pattern/        patal-pattern   — PatternPiece, Project, measurements
+│       ├── pattern/        patal-pattern   — PatternPiece, Project, measurements, CutLine
+│       ├── export/         patal-export    — tiled, true-scale PDF (no dependencies)
 │       └── ffi/            patal-ffi       — uniffi bindings exposed to Swift
 ├── apps/
 │   ├── native/              SwiftUI — iPhone, iPad, Mac (one shared codebase)
@@ -83,6 +84,18 @@ This is a foundation, not a product yet. What's real today, and what isn't:
   ([ADR-004](docs/adr/ADR-004-document-format.md)). 89 unit tests plus a
   property suite and a closed-form curve oracle, `cargo clippy --workspace
   --all-targets -- -D warnings` clean, `cargo deny` clean on all four checks.
+- `patal-export`: tiled PDF at true scale. A millimetre in the model is a
+  millimetre on the paper — there is no scale parameter and no fit-to-page,
+  `Mm` and `Pt` are distinct types with exactly one conversion between them,
+  and every sheet carries a 50mm calibration square so the claim is checkable
+  on the artifact, with a ruler, by someone who does not trust it. It draws
+  `CutLine`, which has no public constructor outside `patal-pattern`, so this
+  crate cannot invent a second opinion about where cloth gets cut. The PDF
+  writer is hand-rolled and dependency-free, because the golden test compares
+  bytes and a general-purpose PDF crate would stamp a clock into them.
+  **Not yet printed.** Everything above is the software agreeing with itself;
+  [docs/setup/printing.md](docs/setup/printing.md) is the measurement it still
+  has to survive.
 - `patal-ffi`: exports the engine's fallible boundary operations
   (perimeter, offset) across the uniffi boundary as `Result`, not as NaN —
   a caller on the other side gets a real error, not a number it has to
@@ -122,6 +135,12 @@ nothing depended on it. There is no Xcode project in this repo, and the
 port's only caller was its own test suite. Seam-allowance geometry belongs
 to `patal-geometry` and will reach Swift through uniffi-generated bindings.
 
+Deleting it removed the second implementation; `CutLine` stops a third from
+appearing. It is minted only by `PatternPiece::cut_boundary()`, has a private
+field, and is what `patal-export` draws — so a crate that wants points to draw
+can read the kernel's answer and cannot compute its own. The rule moved out of
+the review checklist and into the compiler.
+
 The remaining Swift/Rust gap is the identity model, and it is unchanged:
 Swift's `PatternPiece` and `Project` carry a `UUID` that Rust's types have
 no counterpart for, so `PatternPiece`'s `Codable` conformance is
@@ -129,16 +148,16 @@ Swift-to-Swift only — unlike `PatternBoundary`'s, which matches the Rust
 wire format exactly.
 
 What's deliberately not started: the parametric propagation/constraint
-solver (patterns as "a living system" where edits propagate), **export**
-(DXF-AAMA/ASTM, tiled PDF at true scale), **grading**, the AI collaborator
-layer, and any visual identity (colors/type).
+solver (patterns as "a living system" where edits propagate), **DXF-AAMA/ASTM
+export**, multi-piece nesting, **grading**, the AI collaborator layer, and any
+visual identity (colors/type).
 
-Export and grading deserve a sentence rather than a bullet, because they are
-the two capabilities that make this a pattern CAD application and neither is
-in any current plan. Both are pure Rust, both run on Windows with no Mac, and
-both are testable headlessly. Export is also the cheapest route to real
-validation there is: print a tiled PDF at true scale and hand it to a pattern
-maker.
+Grading deserves a sentence rather than a bullet, because with export it is
+one of the two capabilities that make this a pattern CAD application. It is
+pure Rust, runs on Windows with no Mac, and is testable headlessly. Export was
+the other, and it was taken first for the reason that still applies to
+grading: it is the cheapest route to validation that the test suite cannot
+fake — print at true scale and hand it to a pattern maker.
 
 Persistence exists as a *format*, not as file I/O. Every domain type derives
 `Serialize`/`Deserialize`, `Document` carries a `schema_version`, and
