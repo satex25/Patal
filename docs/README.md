@@ -24,7 +24,7 @@ in this documentation:
 | [memorandum.md](memorandum.md) | The founding vision document |
 | [adr/](adr/) | Architecture Decision Records — rules the code must obey |
 | [setup/](setup/) | Toolchain installation, reference repositories, and [printing at true scale](setup/printing.md) — the last of which is an operator runbook, not a developer note |
-| [analysis/](analysis/) | Audits of the codebase as found |
+| [analysis/](analysis/) | Audits of the codebase as found, and of the domain it models — including [the pattern primitive census](analysis/pattern-primitives.md) |
 | [plans/](plans/) | Dated session plans and execution blueprints |
 
 ## Why the decisions are in here

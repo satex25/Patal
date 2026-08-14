@@ -1,10 +1,10 @@
 ---
 title: Status
 tags: [status]
-updated: 2026-08-13
+updated: 2026-08-14
 ---
 
-# Status — 2026-08-13
+# Status — 2026-08-14
 
 Single source of truth for where the work is. Update at the end of each session;
 if this disagrees with any other note, this wins.
@@ -100,15 +100,44 @@ The claim this whole crate exists to make — that a millimetre in the model is 
 millimetre on paper — is untested until a steel rule has been on it, on two printers,
 and that has not happened. `docs/setup/printing.md` is the runbook for doing it.
 
+## The primitive census — 2026-08-14
+
+[docs/analysis/pattern-primitives.md](analysis/pattern-primitives.md) enumerates the
+constructs a garment pattern needs — 34 of them — against what a `.patal` file stores.
+Twenty-nine are absent. It is step K2 of the wave blueprint and it was written **before**
+Seamly2D or Freesewing was opened, on purpose: a textbook supplies the vocabulary, so the
+incumbents are left to answer only the question a textbook cannot, which is whether they
+*persist* a construct or merely draw it. Written the other way round it would have been a
+transcription of Seamly2D's feature list, and ADR-006 would be the feature table the ADR
+index warns against. The commit date is the evidence of the ordering.
+
+One finding does not need either tool and can be acted on now. Per-edge seam allowance,
+fold edges, and notch positions are all attributes of an *edge*, and schema v2 as planned
+already adds one — `joins`, as an array parallel to `SeamPath.segments`. Folding the others
+in later means three parallel arrays that must stay the same length. Choosing the container
+shape once, at v2, costs nothing today and is a breaking migration of the document's core
+type later. **That decision belongs at the v2 freeze**, and the census is what makes it
+visible before the door shuts rather than after.
+
+The other two decisions the freeze actually turns on — whether a dart is an object, and
+whether material belongs to the piece or to the cut — do need evidence, and drafting a
+bodice block produces it as a side effect.
+
 ## Next, in the order I would do it
 
 1. **Decide what a piece stores.** A `PatternPiece` holds a flattened
    `PatternBoundary`, not its authored `SeamPath` — so a saved file cannot be edited
    back into curves. This is the most likely reason for schema version 2 and should be
-   settled before any file leaves this machine.
+   settled before any file leaves this machine. The
+   [primitive census](analysis/pattern-primitives.md) narrows what the freeze has to get
+   right to three decisions; the rest is additive and must not hold the door.
 2. **Look at Seamly2D and Freesewing properly**, then write ADR-006. There is no
    competitive analysis anywhere in this project, and on the axis Pātāl currently
-   competes on it is behind a free thirteen-year-old incumbent.
+   competes on it is behind a free thirteen-year-old incumbent. The
+   [census](analysis/pattern-primitives.md) is the checklist to take in — one question per
+   row, and a diff-based protocol for answering it — but ADR-006 comes from the friction
+   of drafting a block in each tool, not from the census. A wedge argued from a feature
+   table is what has kept this ADR unwritten through two waves.
 3. **Print the thing.** Tiled PDF is built; what is missing is the half that cannot be
    automated. Print the calibration page on two printers, measure both rules and the
    square with a steel rule against the declared ±0.5mm over 200mm, record the printer
