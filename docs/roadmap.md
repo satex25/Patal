@@ -14,18 +14,23 @@ See [status](status.md) for what is actually in flight.
 
 ## The two that make it a pattern CAD application
 
-These are absent from every plan written so far, which is the most surprising thing
-about the plans.
+They were absent from every plan written up to 2026-08-13, which was the most
+surprising thing about the plans. Export is now half built; grading is not started.
 
-**Export.** DXF-AAMA/ASTM for factories, tiled PDF at true scale for home printing.
-Pure Rust, runs on Windows with no Mac, headlessly testable — and the cheapest
-possible route to real validation: print a piece at true scale and hand it to a
-pattern maker. Every claim about the geometry is currently a test assertion.
+**Export — tiled PDF built, DXF not.** `patal-export` ships true-scale tiled PDF: no
+scale parameter, a 50 mm calibration square on every sheet, and
+[ADR-008](adr/ADR-008-export-format-decisions.md) records the conventions it commits
+to. DXF-AAMA/ASTM, the factory-facing half, is untouched and needs a reference capture
+before it can start.
+
+The reason export was taken first still stands, and is worth restating because it is
+about to be tested rather than argued: it is the cheapest possible route to real
+validation. Every claim about the geometry is *still* a test assertion — building the
+emitter did not change that. Printing one and putting a steel rule on it will.
 
 **Grading.** Sizing a pattern up and down a size run. Also pure Rust, also testable
-without a Mac. A pattern tool that cannot grade is a drawing tool.
-
-Both are strong candidates to be the next wave.
+without a Mac. A pattern tool that cannot grade is a drawing tool. Not started, and
+now the strongest candidate for the next wave.
 
 ## The largest one
 

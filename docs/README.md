@@ -23,7 +23,7 @@ in this documentation:
 | [roadmap.md](roadmap.md) | The pillars that are not built yet, and why that is fine |
 | [memorandum.md](memorandum.md) | The founding vision document |
 | [adr/](adr/) | Architecture Decision Records — rules the code must obey |
-| [setup/](setup/) | Toolchain installation and reference-repository notes |
+| [setup/](setup/) | Toolchain installation, reference repositories, and [printing at true scale](setup/printing.md) — the last of which is an operator runbook, not a developer note |
 | [analysis/](analysis/) | Audits of the codebase as found |
 | [plans/](plans/) | Dated session plans and execution blueprints |
 

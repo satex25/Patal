@@ -20,11 +20,15 @@ everything from it.
 which is a real problem (2D bin packing with rotation constraints from the grain line), not a
 page transform. That is why it is not in the wave.
 
-**Context.** `engine/crates/export/` will exist after §3.8 and owns the page transform. Nesting
-sits above it and must respect `GrainLine` (added by the SeamPath blueprint §3.3), because a
-piece cannot be freely rotated on napped fabric.
+**Context.** `engine/crates/export/` now exists and owns the page transform; §3.8 shipped on
+2026-08-14. It gives each piece its own tile grid at its own origin, which is the behaviour
+this item replaces — see the "does not decide" note in
+[ADR-008](docs/adr/ADR-008-export-format-decisions.md). Nesting sits above the page transform
+and must respect `GrainLine` (added by the SeamPath blueprint §3.3), because a piece cannot be
+freely rotated on napped fabric.
 
-**Effort.** L (human) → M (CC). **Priority.** P2. **Depends on.** §3.8, and grain line landing.
+**Effort.** L (human) → M (CC). **Priority.** P2. **Depends on.** Grain line landing. The
+export-side dependency is met.
 
 ---
 
@@ -40,10 +44,16 @@ with real conformance surface, and this wave deliberately does not build it.
 
 **Context.** §3.3 of the wave commits a Seamly2D reference DXF plus a written layer inventory.
 Start there. **Read §5.2 first:** if that reference turned out non-conformant it was demoted
-from oracle to sample, and this work is then spec-driven rather than diff-driven. ADR-008
-records which of the two happened.
+from oracle to sample, and this work is then spec-driven rather than diff-driven.
 
-**Effort.** L (human) → M (CC). **Priority.** P2. **Depends on.** §3.3 reference + ADR-008.
+[ADR-008](docs/adr/ADR-008-export-format-decisions.md) now exists but answers only the PDF
+half. Its "Still open" section says why: §3.3 never ran, so there is no captured reference
+to rule on, and inventing the ruling from a feature table is the failure mode ADR-006 is
+being held back to avoid. Replace that section when the capture lands — do not remove the
+pointers to it.
+
+**Effort.** L (human) → M (CC). **Priority.** P2. **Depends on.** §3.3 reference, then
+ADR-008's "Still open" being resolved.
 
 ---
 

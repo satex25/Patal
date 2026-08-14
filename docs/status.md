@@ -26,25 +26,26 @@ gone: `C:\Users\User\Desktop\patal` is now a directory junction pointing at
 
 ## Right now
 
-**The work is on a branch, not on main.** `wedge-and-validation-wave` carries the
-export wave and is pushed. `origin/main` is untouched and still sits at the last
-commit that went green across all five CI jobs (engine ubuntu, engine Windows,
-desktop, native, and the non-blocking advisories job).
+**Merged and green.** The export wave landed on `main` via PR #1
+(`a9e7f1c`, 2026-08-14). All five CI jobs pass on the merge commit — engine (ubuntu),
+engine (Windows), desktop, native, and the non-blocking advisories job. The
+`wedge-and-validation-wave` branch was deleted locally and on origin after the merge;
+`main` is the only branch.
 
-**CI has not run on the branch, and will not.** `.github/workflows/ci.yml` triggers on
-push only for `main`/`master`, and otherwise on `pull_request`. Until a PR is opened,
-pushing this branch runs nothing — so "pushed" here means backed up off this machine,
-not validated.
+`native` passing matters more than the other four. `swift build` needs a Mac and there
+is none on this machine, so CI is the only place the Swift package is ever compiled —
+it is the one job that cannot be pre-checked locally before pushing.
 
-What has been verified is local, from a clean worktree checkout of the committed tree
-rather than from the working directory: engine fmt, clippy, test, doc and deny, plus
-the harness's clippy and tests. The golden PDF survives checkout byte-identical, which
-is the failure this repo's `.gitattributes` exists to prevent. Each commit builds on
-its own, so the branch is bisectable.
+Local verification before the merge was done from a clean worktree checkout of the
+committed tree rather than from the working directory, because those are not the same
+test: engine fmt, clippy, test, doc and deny, plus the harness's clippy and tests. The
+golden PDF survives checkout byte-identical, which is the failure this repo's
+`.gitattributes` exists to prevent. Every commit builds on its own, so the history is
+bisectable.
 
-The `native` job cannot run here at all — `swift build` needs a Mac. Nothing on the
-branch touches `apps/native`, the desktop frontend, or the CI config, so those three
-jobs face the same inputs they last passed on.
+**A note on what "green" is worth here.** Five green jobs say the software agrees with
+itself on five machines. The export wave's whole purpose is a claim no CI job can
+check — see below.
 
 **The big unknown is resolved.** `swift build` ran against `apps/native` for the first
 time in this project's history and succeeded — `Build complete! (23.10s)` — and
@@ -56,6 +57,12 @@ Rescue tags `pre-graft-backup` and `pre-graft-adr002` are kept **local only**. T
 point into the pre-graft history, which is disjoint from what was pushed; publishing
 them would upload a dead parallel history to the remote for no benefit. Delete them
 once you are confident the graft is settled.
+
+**Branch cleanup must not sweep them up.** They are tags, not branches, and they are
+the only remaining pointers into that disjoint history — a deleted merged branch costs
+nothing because its commits live on in `main`, whereas deleting these makes the
+history they point at unreachable and eventually collectable. It is the one
+irreversible operation in routine cleanup here.
 
 ## What landed in this wave
 
@@ -107,9 +114,11 @@ and that has not happened. `docs/setup/printing.md` is the runbook for doing it.
    square with a steel rule against the declared ±0.5mm over 200mm, record the printer
    and driver, then print a bodice block and hand it to a pattern maker. This is the
    only step that can return the answer "the software is wrong", which is why it exists.
-4. **DXF-AAMA/ASTM export**, the factory-facing format. Untouched. Start from the
-   Seamly2D reference capture and ADR-008's record of whether it is an oracle or a
-   sample.
+4. **DXF-AAMA/ASTM export**, the factory-facing format. Untouched. It needs the
+   Seamly2D reference capture first, and a ruling on whether that reference is an
+   oracle or merely a sample. [ADR-008](adr/ADR-008-export-format-decisions.md) exists
+   but deliberately does not answer that yet — it records the PDF decisions and leaves
+   the DXF question open under "Still open", because there is no capture to rule on.
 
 See [roadmap](roadmap.md) for the longer list.
 

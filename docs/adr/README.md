@@ -11,6 +11,11 @@ cloner could not obtain them — a rule you cannot read is not a rule.
 | [003](ADR-003-curve-representation.md) | Curves as a layer above the polygon kernel, not inside it | Accepted |
 | [004](ADR-004-document-format.md) | Schema version and material identity | Accepted |
 | [005](ADR-005-tauri-as-engineering-harness.md) | Tauri unfrozen as a non-shipping harness | Accepted |
+| [008](ADR-008-export-format-decisions.md) | Tiled PDF first; true scale, stroke centre, overlap-don't-trim | Accepted — partial, DXF still open |
+
+006 and 007 are skipped deliberately rather than renumbered. Both are reserved by the
+wedge-and-validation-wave blueprint, which cites them by number in a dozen places;
+handing those numbers to something else would silently repoint every reference.
 
 Not yet written, and named here so the gap is visible rather than forgotten:
 
@@ -20,6 +25,11 @@ Not yet written, and named here so the gap is visible rather than forgotten:
   currently competes on — draw a polygon, offset a seam allowance — it is behind a
   free incumbent. This should be written *after* actually drafting one bodice block in
   Seamly2D and Freesewing, not from a feature table.
+- **ADR-007 — what a `PatternPiece` stores.** A piece holds a flattened
+  `PatternBoundary`, not the authored `SeamPath` it came from, so a saved file cannot
+  be edited back into curves. Due with the SeamPath storage blueprint; likely the
+  reason for schema version 2, and it should be settled before any `.patal` file
+  leaves this machine.
 
 ## Writing one
 
