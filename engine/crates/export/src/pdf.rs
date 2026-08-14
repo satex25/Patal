@@ -36,8 +36,10 @@ use crate::units::Pt;
 ///
 /// 0.25pt is about 0.09mm — well inside the 0.4mm the geometry crate treats
 /// as cutter tolerance, so which side of the line the scissors take cannot
-/// matter. ADR-008 records the convention that the true line is the centre of
-/// the stroke.
+/// matter. The convention that the true line is the centre of the stroke is
+/// recorded in `docs/adr/ADR-008-export-format-decisions.md`, which also
+/// explains why a measurement read outer-edge to outer-edge comes out one
+/// line width long.
 pub const HAIRLINE_PT: f64 = 0.25;
 
 /// One page: its media box and its content stream.
