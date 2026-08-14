@@ -26,15 +26,25 @@ gone: `C:\Users\User\Desktop\patal` is now a directory junction pointing at
 
 ## Right now
 
-**Work in progress on a branch.** `wedge-and-validation-wave` is 4 commits ahead of
-`origin/main` and unpushed; `origin/main` itself is one continuous history, last green
-across all five CI jobs (engine ubuntu, engine Windows, desktop, native, and the
-non-blocking advisories job).
+**The work is on a branch, not on main.** `wedge-and-validation-wave` carries the
+export wave and is pushed. `origin/main` is untouched and still sits at the last
+commit that went green across all five CI jobs (engine ubuntu, engine Windows,
+desktop, native, and the non-blocking advisories job).
 
-Those four commits are gate-verified locally as far as this machine can go: engine
-fmt, clippy, test, doc and deny all clean, plus the harness's clippy and tests. The
-`native` job cannot run here — `swift build` needs a Mac — so the Swift package is
-unverified against this branch, and nothing on the branch touches it.
+**CI has not run on the branch, and will not.** `.github/workflows/ci.yml` triggers on
+push only for `main`/`master`, and otherwise on `pull_request`. Until a PR is opened,
+pushing this branch runs nothing — so "pushed" here means backed up off this machine,
+not validated.
+
+What has been verified is local, from a clean worktree checkout of the committed tree
+rather than from the working directory: engine fmt, clippy, test, doc and deny, plus
+the harness's clippy and tests. The golden PDF survives checkout byte-identical, which
+is the failure this repo's `.gitattributes` exists to prevent. Each commit builds on
+its own, so the branch is bisectable.
+
+The `native` job cannot run here at all — `swift build` needs a Mac. Nothing on the
+branch touches `apps/native`, the desktop frontend, or the CI config, so those three
+jobs face the same inputs they last passed on.
 
 **The big unknown is resolved.** `swift build` ran against `apps/native` for the first
 time in this project's history and succeeded — `Build complete! (23.10s)` — and
