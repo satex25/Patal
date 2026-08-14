@@ -5,6 +5,11 @@ members = [
     "crates/materials",
     "crates/pattern",
     "crates/ffi",
+    # Not optional bookkeeping. A crate that exists on disk but is absent from
+    # this list is compiled by nothing: `cargo test --workspace`, clippy,
+    # rustdoc and `cargo deny` all walk the member list, so every CI job would
+    # stay green while the crate was never built at all.
+    "crates/export",
 ]
 
 [workspace.package]

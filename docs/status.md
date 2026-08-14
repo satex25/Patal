@@ -26,9 +26,25 @@ gone: `C:\Users\User\Desktop\patal` is now a directory junction pointing at
 
 ## Right now
 
-**Pushed and green.** `origin/main` is one continuous 33-commit history and local is
-in sync (0/0). All five CI jobs pass: engine (ubuntu), engine (Windows), desktop,
-native, and the non-blocking advisories job.
+**The work is on a branch, not on main.** `wedge-and-validation-wave` carries the
+export wave and is pushed. `origin/main` is untouched and still sits at the last
+commit that went green across all five CI jobs (engine ubuntu, engine Windows,
+desktop, native, and the non-blocking advisories job).
+
+**CI has not run on the branch, and will not.** `.github/workflows/ci.yml` triggers on
+push only for `main`/`master`, and otherwise on `pull_request`. Until a PR is opened,
+pushing this branch runs nothing — so "pushed" here means backed up off this machine,
+not validated.
+
+What has been verified is local, from a clean worktree checkout of the committed tree
+rather than from the working directory: engine fmt, clippy, test, doc and deny, plus
+the harness's clippy and tests. The golden PDF survives checkout byte-identical, which
+is the failure this repo's `.gitattributes` exists to prevent. Each commit builds on
+its own, so the branch is bisectable.
+
+The `native` job cannot run here at all — `swift build` needs a Mac. Nothing on the
+branch touches `apps/native`, the desktop frontend, or the CI config, so those three
+jobs face the same inputs they last passed on.
 
 **The big unknown is resolved.** `swift build` ran against `apps/native` for the first
 time in this project's history and succeeded — `Build complete! (23.10s)` — and
@@ -60,6 +76,23 @@ once you are confident the graft is settled.
   on this machine and now draws real geometry with live sliders.
 - **CI gates repaired.** Both new gates in the plan were broken as written.
 
+## Export, on the validation track — 2026-08-13
+
+`patal-export` exists: tiled, true-scale PDF, dependency-free writer, on the engine
+side of the FFI boundary rather than in the harness. It draws `CutLine`, a newtype
+with no public constructor, so no crate outside `patal-pattern` can invent a second
+cut line — the rule that got the Swift kernel deleted is now a compile error rather
+than a review item.
+
+Machine-verified as far as a machine can take it. 134 engine tests green, and rendered
+through pdfium the 50mm calibration square measures 50.004mm and the 200mm rule
+200.008mm, stroke-centre to stroke-centre at 600 DPI.
+
+**It has not been printed.** Every number above is the software agreeing with itself.
+The claim this whole crate exists to make — that a millimetre in the model is a
+millimetre on paper — is untested until a steel rule has been on it, on two printers,
+and that has not happened. `docs/setup/printing.md` is the runbook for doing it.
+
 ## Next, in the order I would do it
 
 1. **Decide what a piece stores.** A `PatternPiece` holds a flattened
@@ -69,9 +102,14 @@ once you are confident the graft is settled.
 2. **Look at Seamly2D and Freesewing properly**, then write ADR-006. There is no
    competitive analysis anywhere in this project, and on the axis Pātāl currently
    competes on it is behind a free thirteen-year-old incumbent.
-3. **Export.** DXF-AAMA/ASTM and tiled PDF at true scale. Pure Rust, runs on Windows,
-   headlessly testable, and the cheapest route to real validation there is: print one
-   at true scale and hand it to a pattern maker.
+3. **Print the thing.** Tiled PDF is built; what is missing is the half that cannot be
+   automated. Print the calibration page on two printers, measure both rules and the
+   square with a steel rule against the declared ±0.5mm over 200mm, record the printer
+   and driver, then print a bodice block and hand it to a pattern maker. This is the
+   only step that can return the answer "the software is wrong", which is why it exists.
+4. **DXF-AAMA/ASTM export**, the factory-facing format. Untouched. Start from the
+   Seamly2D reference capture and ADR-008's record of whether it is an oracle or a
+   sample.
 
 See [roadmap](roadmap.md) for the longer list.
 

@@ -12,7 +12,7 @@
 
 use std::fmt;
 
-use patal_geometry::{GeometryError, PatternBoundary};
+use patal_geometry::{GeometryError, PatternBoundary, Point2};
 use patal_materials::{Material, MaterialId, MaterialLibrary};
 use serde::{Deserialize, Serialize};
 
@@ -83,6 +83,59 @@ impl std::error::Error for PatternError {
 impl From<GeometryError> for PatternError {
     fn from(err: GeometryError) -> Self {
         Self::Geometry(err)
+    }
+}
+
+/// The line someone cuts cloth along, and proof of where it came from.
+///
+/// This type exists to make one specific mistake impossible rather than
+/// merely forbidden. Every consumer of a cut line so far — the harness
+/// preview, and now `patal-export` — needs points to draw, and the cheapest
+/// way to get points is to flatten and offset the outline yourself. Doing
+/// that a second time is exactly the defect class the Swift offset kernel was
+/// deleted to remove: two pieces of code deciding where cloth gets cut, and
+/// no way to tell which one the scissors followed.
+///
+/// A `CutLine` has a private field and no public constructor, so it can only
+/// be minted inside this crate, by [`PatternPiece::cut_boundary`]. A
+/// downstream crate can read one and it cannot fabricate one. That turns
+/// constraint C11 from a rule reviewers have to remember into a rule the type
+/// system enforces at compile time.
+///
+/// It is deliberately not `Serialize`: a cut line is derived, never stored.
+/// Persisting one would let a file assert a cut line that disagrees with the
+/// outline and allowance sitting next to it in the same document.
+#[derive(Debug, Clone, PartialEq)]
+pub struct CutLine {
+    piece: String,
+    boundary: PatternBoundary,
+}
+
+impl CutLine {
+    /// The piece this line was derived from. Carried so that an error or a
+    /// printed page can name it — "the offset failed" is not an actionable
+    /// message when a project holds five pieces.
+    pub fn piece_name(&self) -> &str {
+        &self.piece
+    }
+
+    /// The cut line as points, in millimetres.
+    pub fn points(&self) -> &[Point2] {
+        self.boundary.points()
+    }
+
+    /// Read-only access to the underlying boundary, for callers that want
+    /// the geometry crate's own operations.
+    ///
+    /// Handing out a `&PatternBoundary` does not weaken the guarantee: the
+    /// guarantee is that nobody outside this crate can *mint* a `CutLine`,
+    /// not that the points inside one are secret.
+    pub fn boundary(&self) -> &PatternBoundary {
+        &self.boundary
+    }
+
+    pub fn perimeter(&self) -> f64 {
+        self.boundary.perimeter()
     }
 }
 
@@ -183,8 +236,15 @@ impl PatternPiece {
     }
 
     /// The outline including seam allowance — what actually gets cut.
-    pub fn cut_boundary(&self) -> Result<PatternBoundary, PatternError> {
-        Ok(self.boundary.offset(self.seam_allowance_mm)?)
+    ///
+    /// The one place in the codebase a [`CutLine`] comes into existence. See
+    /// that type for why the return is a newtype rather than a bare
+    /// `PatternBoundary`.
+    pub fn cut_boundary(&self) -> Result<CutLine, PatternError> {
+        Ok(CutLine {
+            piece: self.name.clone(),
+            boundary: self.boundary.offset(self.seam_allowance_mm)?,
+        })
     }
 }
 
@@ -403,6 +463,21 @@ mod tests {
         assert_eq!(piece.seam_allowance_mm(), 10.0);
         let cut = piece.cut_boundary().expect("cuts cleanly");
         assert!(cut.perimeter() > piece.boundary.perimeter());
+    }
+
+    #[test]
+    fn a_cut_line_names_the_piece_it_came_from() {
+        // The provenance half of the CutLine newtype. The other half — that
+        // no crate outside this one can construct a CutLine — is enforced by
+        // the private field and cannot be asserted from inside the crate that
+        // owns it. A `CutLine { .. }` literal in `patal-export` is a
+        // compile error, which is the whole point of C11 living in the type
+        // system rather than in a review checklist.
+        let piece = PatternPiece::new("Front Bodice", square_boundary(200.0));
+        let cut = piece.cut_boundary().expect("cuts cleanly");
+        assert_eq!(cut.piece_name(), "Front Bodice");
+        assert_eq!(cut.points(), cut.boundary().points());
+        assert_eq!(cut.perimeter(), cut.boundary().perimeter());
     }
 
     #[test]
