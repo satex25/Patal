@@ -72,8 +72,14 @@ where units change.
 
 Each content sheet reserves a strip at the foot for a **50 mm calibration square**, and
 page one carries ruled baselines on **both axes** — 200 mm down the page, and across
-the page the largest that fits, which on A4 inside 10 mm margins is 186 mm, printed
-with its true length rather than a round one.
+the page whatever fits, **printed with its true length rather than a round one**.
+
+On A4 the across-page rule is 186 mm, and the arithmetic is worth spelling out because
+it looks off by four: the rule starts 4 mm inside the margin so its corner tick has
+room, giving `210 − (10 + 4) − 10 = 186`, not the 190 mm of bare drawable width. A
+200 mm horizontal rule does not exist on A4 at any margin. Printing the clamped number
+instead of the requested one is the point — a rule labelled 200 mm that is physically
+186 mm would turn this page from an instrument into the very defect it exists to catch.
 
 Both axes, because printers do not scale equally in both directions: the feed direction
 is driven by rollers and the carriage direction by a belt. A single rule cannot tell a
