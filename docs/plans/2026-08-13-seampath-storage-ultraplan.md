@@ -159,20 +159,84 @@ file.
   with nothing to stop them. Intent cannot be re-derived from coordinates, because two
   collinear handles might be coincidence.
 - **Depends on:** nothing.
-- Design:
+- **Design — REVISED, see revision 6.** The join is carried *on the edge*, not in a second
+  array beside it:
   ```rust
   pub enum Join { Corner, Smooth }
 
+  /// One authored edge: its geometry, and how it meets the edge before it.
+  pub struct Edge {
+      geometry: EdgeSegment,
+      join: Join,
+  }
+
   pub struct SeamPath {
       start: Point2,
-      segments: Vec<EdgeSegment>,
-      joins: Vec<Join>,   // len == segments.len()
+      edges: Vec<Edge>,
   }
   ```
-  `joins[i]` describes the join *entering* `segments[i]`, so `joins[0]` is the closure
-  join at `start`. A closed path has exactly as many joins as segments, which is why
-  this shape has no off-by-one to get wrong.
+  `edges[i].join` describes the join *entering* `edges[i]`, so `edges[0].join` is the
+  closure join at `start` — the same semantics the parallel-array design had, with the
+  `len == segments.len()` invariant deleted rather than validated. There is no off-by-one
+  to get wrong because there is no second array to get out of step.
+
+- **Why the container changed, and why now.** The superseded design was
+  `segments: Vec<EdgeSegment>` beside `joins: Vec<Join>`, a parallel array. It is correct
+  and it was reviewed. The problem is what it establishes: `Join` is the *first* per-edge
+  attribute, not the only one. [The primitive census](../analysis/pattern-primitives.md)
+  identifies three more that are attributes of an edge — per-edge seam allowance (P-03),
+  fold edges (P-05) and notch anchors (P-13) — and per-edge allowance is a fold-in rather
+  than a maybe: one scalar per piece is wrong somewhere on every real piece, because a
+  neckline is finished at 6mm and a hem is turned at 40mm.
+
+  Each of those arriving as its own parallel array adds a `len ==` invariant and one more
+  thing every edit that splits or merges a segment must keep in step. Four arrays is four
+  chances to get it wrong, and the fourth one gets it wrong on the path that feeds
+  `cut_boundary()`. Choosing the container once, here, costs nothing extra — `Edge` ships
+  carrying `join` alone — and choosing it after v2 is a breaking migration of the one type
+  the whole document is built out of.
+
+  **This is a container decision, not a scope increase.** `Edge` gains no field beyond
+  `join` in this wave. P-03, P-05 and P-13 stay exactly as the census left them: unresolved,
+  and resolved at K6 on evidence. What changes is that when they are resolved, folding one
+  in is a field on an existing struct rather than a schema v3.
+
+- **What this costs, checked against the tree at `7b223a9` rather than estimated.**
+  - `Edge` is a new public type in `patal-geometry`, and `SeamPath::segments()` becomes
+    `SeamPath::edges()`. `segments()` has **4 call sites, all in
+    `geometry/tests/curve_oracle.rs:493-498`**, one of which is
+    `SeamPath::closed(start, path.segments().to_vec())` and needs `Edge::geometry()` to
+    rebuild its input. Mechanical, and confined to a single test file.
+  - An edge's wire form becomes a nested object rather than a flat one, so a `.patal` grows
+    by about one key per edge. Accepted; the serde subtask says why nesting is the right
+    shape rather than the lazy one.
+  - `SeamPath::new` and `::closed` keep their present signatures, so none of their 14 call
+    sites change. See the constructor subtask.
+
+- **The backward-compatibility argument that no longer applies.** The superseded design made
+  `joins` an `Option<Vec<Join>>` so that "a path written before this field existed still
+  loads". No such path can exist. `SeamPath` appears nowhere in `patal-pattern`,
+  `patal-ffi`, `patal-export` or the Swift package — verified at `7b223a9`. The only
+  `SeamPath` outside the geometry crate is the harness's in-memory `bodice_front()`
+  (`apps/desktop/src-tauri/src/lib.rs:33`), which is flattened before it reaches a piece,
+  and there is no committed `.patal` fixture anywhere in the repository. **`SeamPath`'s wire
+  format has never been written to a file by anything.**
+
+  That is the second reason to move now rather than argue later: this is the last moment at
+  which `SeamPath`'s serialized shape is free to change. It is never this cheap again.
+
 - Subtasks:
+  - **Constructors keep the current ergonomics.** `SeamPath::new(start, Vec<EdgeSegment>)`
+    and `::closed(start, Vec<EdgeSegment>)` keep their present signatures and give every
+    edge `Join::Corner`. All 14 existing call sites compile untouched, and §3.1's lift stays
+    infallible and unmodified — a lifted polygon is all corners by definition, which is
+    exactly what those constructors now produce. Add
+    `SeamPath::with_joins(start, Vec<Edge>)` as the validating constructor for any path that
+    makes a `Smooth` claim.
+  - **Accessors.** `edges() -> &[Edge]`, with `Edge::geometry()`, `Edge::join()` and
+    `Edge::end()` delegating to the geometry. Drop `segments()` rather than keep the name
+    over a changed return type: a name that no longer describes what it returns is worse
+    than four lines of churn.
   - **`Smooth` is validated, not merely recorded.** Incoming and outgoing tangents must
     be parallel and same-signed within a relative epsilon. An unvalidated `Smooth` claim
     is a plausible-looking wrong value on a path that feeds the cut line, which C1
@@ -184,9 +248,29 @@ file.
     as a corner.
   - Line-to-cubic smooth joins are legal and must be tested: a straight hem meeting a
     curved side seam smoothly is ordinary pattern making.
-  - Serde: `SeamPathData.joins` is `Option<Vec<Join>>`. `None` means all-`Corner` of the
-    right length, so a path written before this field existed still loads. A `Some` of
-    the wrong length is an error, never padded.
+  - **Serde: `SeamPathData { start, edges: Vec<Edge> }`, and an `Edge` nests rather than
+    flattens.** An edge on the wire is
+    `{"geometry": {"kind": "cubic", "c1": …, "c2": …, "to": …}, "join": "corner"}`, not a
+    single flat map with `join` sitting beside `to`. Two reasons, and the first is the
+    weaker one: `#[serde(flatten)]` over an internally-tagged enum works but buffers, and
+    its failure messages degrade — the same objection §3.7 raises against `untagged`, which
+    is that the error stops naming what was actually wrong.
+
+    The real reason is that the flat shape misrepresents what an edge is. When P-03 and
+    P-05 arrive, `allowance_mm` and `on_fold` are siblings of `join` — attributes *of* the
+    edge — while `to` and `c1` are the geometry *itself*. Flattening puts them in one map as
+    though they were the same kind of thing, and the shape stops teaching the distinction the
+    container was chosen to make.
+  - **`join` is `#[serde(default)]`; `geometry` is not.** A hand-edited `.patal` is
+    explicitly in scope for this repo — `PatternPiece`'s own documentation contemplates one
+    — and omitting `join` is unambiguous because `Corner` is the *absence* of a claim.
+    Defaulting to it cannot manufacture a claim the coordinates contradict, which is
+    precisely the property revision 1's veto was protecting. A missing or unrecognised
+    `geometry` is an error, loudly.
+  - **The wrong-length-`joins` error variant is not needed and must not be added.** The
+    length mismatch it guarded is now unrepresentable. §3.10 and §5.2 are amended to drop
+    the test that asserted it; a test for a state the type cannot enter is a test that will
+    be quietly deleted later by someone who cannot see what it was for.
 
 ### §3.3 — Grain line  ⚠️ CUT-PATH (persisted)
 - **Purpose:** D4-C. Not speculative as first assessed: DXF-AAMA/ASTM defines grain
@@ -284,8 +368,11 @@ file.
     Never mutating in place: a half-migrated document that a caller then saves is the
     failure mode that turns a read bug into a write bug.
   - Field mapping: `boundary` lifts via §3.1; `id` is freshly minted (no v1 file
-    references pieces by id, so minting is safe); `grain` is `None`; joins default to
-    all-`Corner`; project gains the default tolerance.
+    references pieces by id, so minting is safe); `grain` is `None`; project gains the
+    default tolerance. **Joins need no mapping step under revision 6** — the lift calls
+    `SeamPath::new`, which produces `Edge`s already carrying `Join::Corner`, so there is no
+    second array to build to the right length and no way for the migration to build it
+    wrong. One line of the mapping deleted rather than rewritten.
 
 ### §3.8 — Harness update  ⚠️ visual proof
 - **Purpose:** the gap was visible in the harness, so the fix is proven there.
@@ -304,9 +391,12 @@ file.
 - **Purpose:** `Project.swift` decodes `boundary` and will not compile against v2. CI is
   gated on it, so leaving it stale is not an option.
 - **Depends on:** §3.7.
-- **Decided (D5): mirror.** Add `EdgeSegment`, `SeamPath`, `Join`, `GrainLine` and the
-  piece's `id` as Codable value types. Roughly 60 lines. See §6 for why this does not
-  reopen the last wave's deletion of the Swift offset kernel.
+- **Decided (D5): mirror.** Add `EdgeSegment`, **`Edge`**, `SeamPath`, `Join`, `GrainLine`
+  and the piece's `id` as Codable value types. Roughly 60 lines, plus one small struct for
+  `Edge` under revision 6 — which also removes the need for Swift to check that two arrays
+  are the same length, a check it had no good way to enforce and would have carried as a
+  comment. See §6 for why this does not reopen the last wave's deletion of the Swift offset
+  kernel.
 - Subtasks:
   - Value types only. **No algorithms, no geometry, no flattening.** The line this wave
     must not cross is a second implementation of anything that decides where cloth is
@@ -351,6 +441,13 @@ file.
 - **ADR-007 (new):** what a pattern piece stores. Records D1 through D4, the C9
   argument for the lift, the validated-`Smooth` veto, the tolerance default with its
   measurement, and the loader-dispatch rejection of `untagged`.
+- **ADR-007 also records the edge-attribute container (revision 6)** and, in the rejected
+  section, the parallel-array shape it replaced. This one matters more than it looks: the
+  reason for `Edge` is not visible in the code it produces — a struct holding one field
+  reads like indirection for its own sake, and the next reader to encounter it will be
+  tempted to flatten it back. What justifies it is the three attributes not yet added.
+  Cite [the primitive census](../analysis/pattern-primitives.md) rows P-03, P-05 and P-13
+  by number so the argument survives the wave that made it.
 - Close ADR-004's two open items: the flattened-boundary note (this wave) and the piece
   identity divergence (§3.4).
 - ADR-003 gains a back-reference: the two-layer split now reaches the document.
@@ -362,7 +459,7 @@ file.
 
 ```
 §3.1 (lift, ⚠️) ──┐
-§3.2 (joins, ⚠️) ─┤
+§3.2 (edges, ⚠️) ─┤
 §3.3 (grain, ⚠️) ─┼──▶ §3.6 (piece stores SeamPath, ⚠️) ──▶ §3.7 (v2 + migration, ⚠️⛔)
 §3.4 (PieceId) ───┤            ▲                                    │
 §3.5 (tolerance) ─┘────────────┘                                    ├──▶ §3.8 (harness)
@@ -408,10 +505,16 @@ it. §3.7 sits behind everything for that reason.
 ### §5.2 — spec for §3.2 (joins)  ⚠️ CUT-PATH
 - **Method:** tangent comparison at construction, relative epsilon scaled to the
   coordinates involved, mirroring `CLOSURE_SNAP_RELATIVE` at `curves.rs:65`.
-- **Artifacts:** `Join`, `SeamPath.joins`, `SmoothJoinUndefinedTangent` and a
-  non-collinear variant, `Option<Vec<Join>>` wire shape.
-- **Validation:** smooth-claim rejection tests; line-to-cubic acceptance; missing
-  `joins` key loads as all-`Corner`; wrong-length `joins` errors.
+- **Artifacts:** `Join`, **`Edge`**, `SeamPath.edges`, `SeamPath::with_joins`,
+  `SmoothJoinUndefinedTangent` and a non-collinear variant, the nested `Edge` wire shape.
+  Revised by revision 6 — the join now rides on the edge rather than in a parallel array.
+- **Validation:** smooth-claim rejection tests; line-to-cubic acceptance; a missing `join`
+  key loads as `Corner`; an unrecognised `geometry` errors. **No wrong-length test** — the
+  mismatch it covered is unrepresentable under revision 6, and asserting against a state the
+  type cannot enter is how a test ends up deleted by someone who cannot see its purpose.
+- **Also validate that the container did its job:** adding a second attribute to `Edge` must
+  not require touching `SeamPath`'s invariants. Not a test — a five-minute check at review
+  time, and the only evidence that revision 6 bought what it claimed.
 - **Failure modes:** the epsilon is too tight and refuses joins a designer legitimately
   drew; too loose and it certifies a visible kink as smooth.
 - **Fallback:** if the epsilon proves contentious, widen it and pin the chosen value in
@@ -547,7 +650,8 @@ is definitely wrong, since CI is gated on it.
 **Build order.**
 
 1. §3.1 lift, with the C9 argument in the doc comment. → bit-exactness property green.
-2. §3.2 joins, validated. → smooth-claim rejection tests green.
+2. §3.2 the `Edge` container, then joins, validated. **Re-run §6 over the container first
+   (revision 6).** → smooth-claim rejection tests green.
 3. §3.3 grain line. → 190° survives normalisation.
 4. §3.4 `PieceId` + `find_piece_by_id`. → ADR-004's identity divergence closed.
 5. §3.5 project tolerance + **hand-written `Default`**. → `Project::default()` is valid.
@@ -599,3 +703,20 @@ ADR-004's two open items closed; harness proof that curves survive a round trip.
 | 3 | §3.5 | Hand-written `Default` added for `Project`/`ProjectData` | CRITIC pass: derived `Default` mints an invalid tolerance |
 | 4 | §3.7 | `#[serde(untagged)]` rejected for hand-written `Deserialize` | `serde_json` is dev-only; untagged errors defeat the version field's purpose |
 | 5 | §4 | Migration moved from first to last | It encodes the final v2 shape, so writing it early guarantees rewriting it |
+| 6 | §3.2 (§3.7, §3.9, §3.12, §5.2) | Parallel `joins: Vec<Join>` replaced by `edges: Vec<Edge>`, the join carried on the edge | Primitive census (K2): `Join` is the first per-edge attribute, not the only one — P-03, P-05 and P-13 are all edge attributes, and `SeamPath`'s wire shape has never reached a file, so this is the last moment the container is free |
+
+**On revision 6, and what it is not.** It was made on 2026-08-15 against `main` at
+`7b223a9`, after [the primitive census](../analysis/pattern-primitives.md) landed and
+before any of §3 was implemented. It changes the *shape* the attributes live in. It adds no
+attribute, moves no approval node, and resolves none of P-03, P-05 or P-13 — those stay
+with K6, on evidence. If the container turns out to be wrong, it is wrong about one struct
+with one field in it; if the parallel arrays turn out to be wrong, they are wrong about a
+document format that already exists in someone's hands. The asymmetry is the argument.
+
+**It has not been through §6.** The RISK-AGENT pass above verdicted APPROVED on the
+superseded design. Revision 6 does not weaken any row in that table — the kernel is still
+untouched, `PatternBoundary`'s wire format is still untouched, C1's validated-`Smooth` rule
+is preserved verbatim and the C9 argument for the lift is unaffected — but "does not weaken
+it" is a claim by the person who made the change, which is exactly the standing this
+blueprint's own §6 exists to refuse. **Re-run the risk pass over §3.2 before step 2 of the
+build order**, and treat the container as unreviewed until it has.

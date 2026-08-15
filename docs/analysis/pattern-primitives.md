@@ -732,14 +732,21 @@ to be right at it. Of 34 rows, **three decisions** touch it. Everything else is 
 can land at v3 for the same price as v2 — by the rule pinned at the top, none of it may hold
 the door.
 
-**Decision 1 — the edge-attribute container. Four rows, one answer.** P-03 (per-edge
-allowance), P-05 (fold edge), P-13 (notch position) and P-08's requirement that an edge be
-*stably addressable* all reduce to the same question: how does an edge carry attributes, and
-how is a position on an edge named? v2 already answers it once, implicitly, by adding
-`joins` as a parallel array. Answering it deliberately — `Vec<Edge>` carrying geometry plus
-attributes, with `Join` as the only attribute shipped — costs nothing now and is a breaking
-migration of the document's core type later. **This is the single highest-value output of
-K2 and it needs no evidence from either incumbent.** It can be decided today.
+**Decision 1 — the edge-attribute container. Four rows, one answer. TAKEN 2026-08-15.**
+P-03 (per-edge allowance), P-05 (fold edge), P-13 (notch position) and P-08's requirement
+that an edge be *stably addressable* all reduce to the same question: how does an edge carry
+attributes, and how is a position on an edge named? v2 answered it once implicitly, by adding
+`joins` as an array parallel to `segments`. Answering it deliberately costs nothing now and
+is a breaking migration of the document's core type later — and it needs no evidence from
+either incumbent, which made it the one thing K2 could settle on its own.
+
+**Settled:** [the SeamPath blueprint's §3.2](../plans/2026-08-13-seampath-storage-ultraplan.md)
+was amended to `edges: Vec<Edge>`, with `Edge` carrying `join` and nothing else. F1 inherits
+this rather than deciding it. Two things did *not* change and are worth restating, because the
+amendment is easy to over-read: **no attribute was added** — P-03, P-05 and P-13 remain
+unresolved and remain K6's, on evidence — and **the container has not been through the
+blueprint's own §6 risk pass**, which verdicted APPROVED on the superseded shape. It is
+scheduled before step 2 of the build order and should be treated as unreviewed until then.
 
 **Decision 2 — is a dart an object? (P-09)** If yes, the authored outline stops being
 authoritative and `cut_boundary()` becomes a function of outline *and* darts. K3 produces

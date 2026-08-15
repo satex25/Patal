@@ -529,6 +529,13 @@ measuring happens.
 **JOIN**
 
 - **F1.** ⛔ **v2 shape freeze.** Operator sign-off, informed by K6 and now also by V6's verdict.
+  **One of its three decisions is already made.** K2's census found the edge-attribute
+  container decidable without either incumbent, and the SeamPath blueprint's §3.2 was amended
+  on 2026-08-15 (its revision 6) to carry `edges: Vec<Edge>` rather than a `joins` array
+  parallel to `segments`. F1 inherits that rather than re-opening it. What remains for F1 are
+  the two that need evidence — is a dart an object (P-09), and does material belong to the
+  piece or to the cut (P-21) — plus whatever K6 promotes. See
+  [the census](../analysis/pattern-primitives.md), *What F1 actually has to decide*.
 - **F2.** ⛔ **Swift mirror or delete.** Inherited; recommendation is mirror.
 - **F3.** §3.7 execute the SeamPath blueprint's 12 steps, with §3.6's reconciliation as its step 1
   (decision 12). → its S1-S8 green, ADR-007.
