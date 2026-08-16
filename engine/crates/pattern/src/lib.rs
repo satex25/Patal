@@ -15,6 +15,7 @@ use std::fmt;
 use patal_geometry::{GeometryError, PatternBoundary, Point2};
 use patal_materials::{Material, MaterialId, MaterialLibrary};
 use serde::{Deserialize, Serialize};
+use uuid::Uuid;
 
 mod grain;
 
@@ -157,6 +158,38 @@ pub struct Measurement {
     pub value_mm: f64,
 }
 
+/// A piece's stable identity, independent of its name.
+///
+/// Copied deliberately from `MaterialId` rather than invented: same UUID
+/// backing, same `serde(transparent)` so it is a plain string on the wire and
+/// `Foundation.UUID` reads it directly, same refusal to implement `Default`.
+///
+/// Names are not identity. Two pieces can legitimately be called "Front", and
+/// grading and export both need to say *which* piece without depending on a
+/// string the designer may rename.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct PieceId(Uuid);
+
+impl PieceId {
+    /// Mints a fresh identity. Deliberately not `Default`: an id should be
+    /// created where a piece is created, never conjured to fill a gap.
+    #[allow(clippy::new_without_default)]
+    pub fn new() -> Self {
+        Self(Uuid::new_v4())
+    }
+
+    pub fn as_uuid(&self) -> Uuid {
+        self.0
+    }
+}
+
+impl fmt::Display for PieceId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
 /// One cuttable piece of a garment: its outline, seam allowance, and the
 /// material it will be cut from.
 ///
@@ -170,6 +203,10 @@ pub struct Measurement {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(try_from = "PatternPieceData", into = "PatternPieceData")]
 pub struct PatternPiece {
+    /// Private, with no setter: an id describes *which* piece this is, and a
+    /// caller able to assign one is a caller able to make two pieces claim to
+    /// be the same piece.
+    id: PieceId,
     pub name: String,
     pub boundary: PatternBoundary,
     seam_allowance_mm: f64,
@@ -187,6 +224,7 @@ pub struct PatternPiece {
 /// the seam-allowance setter need, and nothing that isn't also public API.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct PatternPieceData {
+    id: PieceId,
     name: String,
     boundary: PatternBoundary,
     seam_allowance_mm: f64,
@@ -198,6 +236,10 @@ impl TryFrom<PatternPieceData> for PatternPiece {
 
     fn try_from(data: PatternPieceData) -> Result<Self, Self::Error> {
         let mut piece = PatternPiece::new(data.name, data.boundary);
+        // `new` minted a fresh id; the file's is the real one. Overwriting it
+        // here rather than skipping `new` keeps every other invariant that
+        // constructor establishes in one place.
+        piece.id = data.id;
         piece.set_seam_allowance_mm(data.seam_allowance_mm)?;
         piece.material = data.material;
         Ok(piece)
@@ -207,6 +249,7 @@ impl TryFrom<PatternPieceData> for PatternPiece {
 impl From<PatternPiece> for PatternPieceData {
     fn from(piece: PatternPiece) -> Self {
         Self {
+            id: piece.id,
             name: piece.name,
             boundary: piece.boundary,
             seam_allowance_mm: piece.seam_allowance_mm,
@@ -222,11 +265,19 @@ impl PatternPiece {
 
     pub fn new(name: impl Into<String>, boundary: PatternBoundary) -> Self {
         Self {
+            id: PieceId::new(),
             name: name.into(),
             boundary,
             seam_allowance_mm: Self::DEFAULT_SEAM_ALLOWANCE_MM,
             material: None,
         }
+    }
+
+    /// This piece's identity. No setter: an id describes which piece this is,
+    /// and letting a caller assign one would let two pieces claim to be the
+    /// same piece.
+    pub fn id(&self) -> PieceId {
+        self.id
     }
 
     pub fn seam_allowance_mm(&self) -> f64 {
@@ -363,6 +414,12 @@ impl Project {
         self.pieces.iter().find(|p| p.name == name)
     }
 
+    /// The lookup that makes [`PieceId`] worth storing. Without it the field
+    /// is bytes on disk; grading and export both index pieces by identity.
+    pub fn find_piece_by_id(&self, id: PieceId) -> Option<&PatternPiece> {
+        self.pieces.iter().find(|p| p.id == id)
+    }
+
     /// Sets a named measurement, overwriting any existing value of the same
     /// name.
     pub fn set_measurement(&mut self, name: impl Into<String>, value_mm: f64) {
@@ -466,6 +523,43 @@ mod tests {
             Point2::new(0.0, side),
         ])
         .expect("square is a valid boundary")
+    }
+
+    #[test]
+    fn two_pieces_never_share_an_id() {
+        let a = PatternPiece::new("Front", square_boundary(100.0));
+        let b = PatternPiece::new("Front", square_boundary(100.0));
+        assert_ne!(a.id(), b.id(), "same name, different identity");
+    }
+
+    #[test]
+    fn a_piece_is_findable_by_id_as_well_as_by_name() {
+        let mut project = Project::new("Blouse");
+        let piece = PatternPiece::new("Front", square_boundary(100.0));
+        let id = piece.id();
+        project.add_piece(piece);
+
+        assert_eq!(
+            project.find_piece_by_id(id).map(|p| p.name.as_str()),
+            Some("Front")
+        );
+        assert!(project.find_piece_by_id(PieceId::new()).is_none());
+    }
+
+    #[test]
+    fn an_id_survives_a_round_trip_and_is_a_plain_string_on_the_wire() {
+        // A plain string, not a nested object, so Swift's Foundation.UUID
+        // decodes it directly — the same treatment MaterialId got.
+        let piece = PatternPiece::new("Front", square_boundary(100.0));
+        let json = serde_json::to_value(&piece).expect("serializes");
+        assert!(
+            json["id"].is_string(),
+            "id must be a bare string, got {}",
+            json["id"]
+        );
+
+        let restored: PatternPiece = serde_json::from_value(json).expect("round trips");
+        assert_eq!(restored.id(), piece.id());
     }
 
     #[test]
@@ -707,6 +801,7 @@ mod tests {
         // .patal file load a piece that would cut nine times too large,
         // silently. Loading one now fails instead.
         let json = r#"{
+            "id": "5f5c1a7e-0f3b-4c9e-9a2d-6b8f4c1e2d70",
             "name": "Front Bodice",
             "boundary": [
                 {"x":0.0,"y":0.0},{"x":200.0,"y":0.0},

@@ -646,6 +646,7 @@ dependencies = [
  "patal-materials",
  "serde",
  "serde_json",
+ "uuid",
 ]
 
 [[package]]
