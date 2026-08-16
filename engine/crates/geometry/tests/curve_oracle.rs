@@ -17,7 +17,9 @@
 //! | convex (circle) | `circle_oracle_sweep` | `circle_oracle_sweep` |
 //! | concave (bite) | `concave_arc_outset_stays_within_tolerance` | `concave_arc_inset_stays_within_tolerance` |
 
-use patal_geometry::{EdgeSegment, GeometryError, PatternBoundary, Point2, SeamPath, Winding};
+use patal_geometry::{
+    Edge, EdgeSegment, GeometryError, Join, PatternBoundary, Point2, SeamPath, Winding,
+};
 
 /// One cubic approximating a circular arc from `theta0` to `theta1`.
 ///
@@ -490,12 +492,13 @@ fn closed_appends_the_edge_new_refuses_to_invent() {
     ];
 
     let path = SeamPath::closed(start, open.clone()).expect("closes");
-    assert_eq!(path.segments().len(), open.len() + 1);
-    assert_eq!(path.segments().last().unwrap().end(), start);
+    assert_eq!(path.edges().len(), open.len() + 1);
+    assert_eq!(path.edges().last().unwrap().end(), start);
 
     // An already-closed path is left exactly as it was.
-    let already = SeamPath::closed(start, path.segments().to_vec()).unwrap();
-    assert_eq!(already.segments().len(), path.segments().len());
+    let rebuilt: Vec<EdgeSegment> = path.edges().iter().map(|e| e.geometry()).collect();
+    let already = SeamPath::closed(start, rebuilt).unwrap();
+    assert_eq!(already.edges().len(), path.edges().len());
 }
 
 #[test]
@@ -546,7 +549,7 @@ fn a_hand_edited_open_path_cannot_be_deserialized() {
     // The same guarantee PatternBoundary has: validation is not something
     // a file can skip by being written by hand.
     let json = r#"{"start":{"x":0.0,"y":0.0},
-                   "segments":[{"kind":"line","to":{"x":10.0,"y":0.0}}]}"#;
+                   "edges":[{"geometry":{"kind":"line","to":{"x":10.0,"y":0.0}}}]}"#;
     let err = serde_json::from_str::<SeamPath>(json).unwrap_err();
     assert!(err.to_string().contains("ends at"), "{err}");
 }
@@ -578,4 +581,90 @@ fn a_straight_path_needs_no_subdivision_and_no_curvature() {
     // offset must not change the result.
     let for_offset = path.flatten_for_offset(0.001, 500.0).unwrap();
     assert_eq!(for_offset.points(), flattened.points());
+}
+
+#[test]
+fn every_edge_from_the_plain_constructor_is_a_corner() {
+    let start = Point2::new(0.0, 0.0);
+    let path = SeamPath::new(
+        start,
+        vec![
+            EdgeSegment::Line {
+                to: Point2::new(10.0, 0.0),
+            },
+            EdgeSegment::Line {
+                to: Point2::new(10.0, 10.0),
+            },
+            EdgeSegment::Line { to: start },
+        ],
+    )
+    .expect("a triangle closes");
+
+    assert_eq!(path.edges().len(), 3);
+    assert!(path.edges().iter().all(|e| e.join() == Join::Corner));
+    assert_eq!(
+        path.edges()[0].geometry(),
+        EdgeSegment::Line {
+            to: Point2::new(10.0, 0.0)
+        }
+    );
+    assert_eq!(path.edges()[2].end(), start);
+}
+
+#[test]
+fn an_edge_is_a_nested_object_on_the_wire_not_a_flat_one() {
+    // The nesting is the point. When per-edge allowance (P-03) and fold
+    // edges (P-05) arrive they are siblings of `join`, while `to` and `c1`
+    // are the geometry itself. A flat map puts them in one bag as though
+    // they were the same kind of thing, and the shape stops teaching the
+    // distinction the container was chosen to make.
+    let start = Point2::new(0.0, 0.0);
+    let path = SeamPath::new(
+        start,
+        vec![
+            EdgeSegment::Line {
+                to: Point2::new(1.0, 0.0),
+            },
+            EdgeSegment::Line { to: start },
+        ],
+    )
+    .expect("closes");
+
+    let json = serde_json::to_value(&path).expect("serializes");
+    let edge = &json["edges"][0];
+    assert_eq!(edge["geometry"]["kind"], "line");
+    assert_eq!(edge["join"], "corner");
+    assert!(
+        edge.get("to").is_none(),
+        "geometry must not be flattened into the edge: {edge}"
+    );
+}
+
+#[test]
+fn an_edge_with_no_join_key_loads_as_a_corner() {
+    // `Corner` is the absence of a claim, so omitting it cannot manufacture
+    // one. A hand-edited `.patal` is explicitly in scope for this repo.
+    let json = r#"{
+        "start": {"x": 0.0, "y": 0.0},
+        "edges": [
+            {"geometry": {"kind": "line", "to": {"x": 1.0, "y": 0.0}}},
+            {"geometry": {"kind": "line", "to": {"x": 0.0, "y": 0.0}}}
+        ]
+    }"#;
+    let path: SeamPath = serde_json::from_str(json).expect("loads without a join key");
+    assert!(path.edges().iter().all(|e| e.join() == Join::Corner));
+}
+
+#[test]
+fn an_edge_carries_the_join_it_was_built_with() {
+    // The container's whole job: geometry and its attributes travel together.
+    let edge = Edge::new(
+        EdgeSegment::Line {
+            to: Point2::new(5.0, 0.0),
+        },
+        Join::Smooth,
+    );
+    assert_eq!(edge.join(), Join::Smooth);
+    assert_eq!(edge.end(), Point2::new(5.0, 0.0));
+    assert_eq!(Edge::corner(edge.geometry()).join(), Join::Corner);
 }

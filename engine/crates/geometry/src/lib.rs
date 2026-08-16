@@ -19,7 +19,7 @@ use serde::{Deserialize, Serialize};
 
 mod curves;
 
-pub use curves::{EdgeSegment, SeamPath};
+pub use curves::{Edge, EdgeSegment, Join, SeamPath};
 
 /// Everything that can go wrong in this crate.
 #[derive(Debug, Clone, PartialEq)]
