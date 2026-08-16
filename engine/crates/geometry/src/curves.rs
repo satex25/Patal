@@ -64,6 +64,25 @@ const MAX_TOLERANCE_TIGHTENING: f64 = 1.0e4;
 /// noise that trigonometry leaves behind.
 const CLOSURE_SNAP_RELATIVE: f64 = 1.0e-12;
 
+/// How far from parallel two tangents may sit and still be called smooth.
+///
+/// Compared against the *sine* of the angle between them, which is the cross
+/// product divided by both magnitudes — so this is scale-free and means the
+/// same thing on a 10mm buttonhole and a 2000mm bolt of cloth, exactly as
+/// `CLOSURE_SNAP_RELATIVE` does for distance.
+///
+/// At 1e-9 radians, a 100mm handle deviates by 1e-7mm: ten thousand times
+/// finer than a micron, far below any coordinate a designer expresses, and
+/// several orders above the ~1e-13 relative noise a cross product of
+/// millimetre-scale coordinates leaves behind. A designer's tool that draws a
+/// smooth join computes collinear handles exactly; this threshold exists for
+/// the float noise on the way to and from a file, not for hand-typed
+/// coordinates.
+///
+/// If it ever proves too tight, widen it and pin the new value in a named test
+/// with the reasoning. Never drop the check to make a case pass.
+pub const SMOOTH_JOIN_RELATIVE: f64 = 1.0e-9;
+
 /// One authored edge, starting wherever the previous one ended.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
@@ -243,6 +262,53 @@ impl SeamPath {
         let end = edges.last().expect("checked non-empty").end();
         if end != start {
             return Err(GeometryError::PathNotClosed { start, end });
+        }
+
+        // Where each edge begins. Edge 0 begins at `start`; every other edge
+        // begins where its predecessor ended.
+        let mut origins: Vec<Point2> = Vec::with_capacity(edges.len());
+        let mut cursor = start;
+        for edge in &edges {
+            origins.push(cursor);
+            cursor = edge.end();
+        }
+
+        let count = edges.len();
+        for index in 0..count {
+            if edges[index].join() != Join::Smooth {
+                continue;
+            }
+
+            // `edges[i].join` describes the join *entering* edge i, so
+            // edges[0]'s join is the closure join and its predecessor is the
+            // last edge.
+            let previous = (index + count - 1) % count;
+            let incoming = end_tangent(edges[previous].geometry(), origins[previous]);
+            let outgoing = start_tangent(edges[index].geometry(), origins[index]);
+
+            let (Some((ix, iy)), Some((ox, oy))) = (incoming, outgoing) else {
+                return Err(GeometryError::SmoothJoinUndefinedTangent { join: index });
+            };
+
+            let cross = ix * oy - iy * ox;
+            let dot = ix * ox + iy * oy;
+            let sine = cross.abs() / (ix.hypot(iy) * ox.hypot(oy));
+
+            // `reversed` means a cusp — parallel but pointing opposite ways —
+            // so it is `dot < 0`, not `dot <= 0`. A perpendicular join has
+            // `dot == 0` and is not a reversal; it is refused anyway, by the
+            // sine test, because perpendicular tangents have sine 1. That
+            // makes the two branches disjoint rather than overlapping, and it
+            // is why the strict comparison loses nothing: `dot == 0` with two
+            // non-zero tangents implies `sine == 1`, which always exceeds the
+            // threshold.
+            if sine > SMOOTH_JOIN_RELATIVE || dot < 0.0 {
+                return Err(GeometryError::SmoothJoinNotTangent {
+                    join: index,
+                    sine,
+                    reversed: dot < 0.0,
+                });
+            }
         }
 
         Ok(Self { start, edges })
@@ -483,4 +549,30 @@ fn cubic_curvature(p0: Point2, p1: Point2, p2: Point2, p3: Point2, t: f64) -> Op
 
     let curvature = (dx * ddy - dy * ddx).abs() / denominator;
     curvature.is_finite().then_some(curvature)
+}
+
+/// The direction a segment leaves `from` in, or `None` where that direction
+/// is undefined.
+fn start_tangent(segment: EdgeSegment, from: Point2) -> Option<(f64, f64)> {
+    let head = match segment {
+        EdgeSegment::Line { to } => to,
+        EdgeSegment::Cubic { c1, .. } => c1,
+    };
+    non_degenerate(head.x - from.x, head.y - from.y)
+}
+
+/// The direction a segment arrives at its end in, or `None` where that
+/// direction is undefined.
+fn end_tangent(segment: EdgeSegment, from: Point2) -> Option<(f64, f64)> {
+    let (tail, head) = match segment {
+        EdgeSegment::Line { to } => (from, to),
+        EdgeSegment::Cubic { c2, to, .. } => (c2, to),
+    };
+    non_degenerate(head.x - tail.x, head.y - tail.y)
+}
+
+/// A tangent vector, unless it has collapsed to a point.
+fn non_degenerate(dx: f64, dy: f64) -> Option<(f64, f64)> {
+    let length = dx.hypot(dy);
+    (length > 0.0 && length.is_finite()).then_some((dx, dy))
 }

@@ -19,7 +19,7 @@ use serde::{Deserialize, Serialize};
 
 mod curves;
 
-pub use curves::{Edge, EdgeSegment, Join, SeamPath};
+pub use curves::{Edge, EdgeSegment, Join, SeamPath, SMOOTH_JOIN_RELATIVE};
 
 /// Everything that can go wrong in this crate.
 #[derive(Debug, Clone, PartialEq)]
@@ -80,6 +80,24 @@ pub enum GeometryError {
     /// no sensible default to fall back to: the tolerance is the entire
     /// contract between an authored curve and the polygon that gets cut.
     ToleranceNotPositive { tolerance_mm: f64 },
+    /// A `Join::Smooth` sits where a tangent does not exist — a cubic whose
+    /// first handle is coincident with its own start, or a zero-length edge.
+    ///
+    /// Refused rather than quietly demoted to a corner: a demotion stores a
+    /// claim nobody checked, and this crate does not do that.
+    SmoothJoinUndefinedTangent { join: usize },
+    /// A `Join::Smooth` that the coordinates on either side contradict.
+    ///
+    /// `sine` is the sine of the angle between the tangents, so it is
+    /// scale-free and reads directly as "how far off tangency this is".
+    /// `reversed` distinguishes the cusp case — tangents parallel but
+    /// pointing opposite ways — where `sine` is near zero and only the
+    /// direction check catches it.
+    SmoothJoinNotTangent {
+        join: usize,
+        sine: f64,
+        reversed: bool,
+    },
 }
 
 impl fmt::Display for GeometryError {
@@ -133,6 +151,33 @@ impl fmt::Display for GeometryError {
                 f,
                 "flattening tolerance {tolerance_mm}mm must be positive and finite"
             ),
+            Self::SmoothJoinUndefinedTangent { join } => write!(
+                f,
+                "the smooth join entering edge {join} has no defined tangent: a control \
+                 point is coincident with the point it leaves, so there is no direction \
+                 to be smooth about"
+            ),
+            Self::SmoothJoinNotTangent {
+                join,
+                sine,
+                reversed,
+            } => {
+                if *reversed {
+                    write!(
+                        f,
+                        "the smooth join entering edge {join} reverses direction: the \
+                         tangents are parallel but point opposite ways, which is a cusp, \
+                         not a smooth join"
+                    )
+                } else {
+                    write!(
+                        f,
+                        "the smooth join entering edge {join} is not tangent: the angle \
+                         between the tangents has sine {sine}, above the {SMOOTH_JOIN_RELATIVE} \
+                         this crate accepts as float noise"
+                    )
+                }
+            }
         }
     }
 }

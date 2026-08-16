@@ -668,3 +668,168 @@ fn an_edge_carries_the_join_it_was_built_with() {
     assert_eq!(edge.end(), Point2::new(5.0, 0.0));
     assert_eq!(Edge::corner(edge.geometry()).join(), Join::Corner);
 }
+
+/// A square with a genuinely smooth join is impossible — every corner turns
+/// 90°. This helper builds a shape whose first join *is* smooth: a straight
+/// run into a cubic whose first handle continues the same direction.
+fn line_into_collinear_cubic() -> (Point2, Vec<Edge>) {
+    let start = Point2::new(0.0, 0.0);
+    // Edge 0: a line east to (10, 0). Its end tangent is +x.
+    // Edge 1: a cubic from (10, 0) whose c1 is (20, 0) — start tangent +x.
+    // The join *entering* edge 1 is therefore smooth.
+    let edges = vec![
+        Edge::corner(EdgeSegment::Line {
+            to: Point2::new(10.0, 0.0),
+        }),
+        Edge::new(
+            EdgeSegment::Cubic {
+                c1: Point2::new(20.0, 0.0),
+                c2: Point2::new(30.0, 10.0),
+                to: Point2::new(30.0, 20.0),
+            },
+            Join::Smooth,
+        ),
+        Edge::corner(EdgeSegment::Line { to: start }),
+    ];
+    (start, edges)
+}
+
+#[test]
+fn a_line_meeting_a_cubic_in_line_is_a_legal_smooth_join() {
+    // Ordinary pattern making: a straight hem meeting a curved side seam.
+    let (start, edges) = line_into_collinear_cubic();
+    let path = SeamPath::with_joins(start, edges).expect("collinear handles are smooth");
+    assert_eq!(path.edges()[1].join(), Join::Smooth);
+}
+
+#[test]
+fn a_smooth_claim_the_coordinates_contradict_is_refused() {
+    let start = Point2::new(0.0, 0.0);
+    // Edge 0 ends heading +x; edge 1's c1 heads +y. That is a visible corner,
+    // and calling it smooth is a lie the cut line would inherit.
+    let edges = vec![
+        Edge::corner(EdgeSegment::Line {
+            to: Point2::new(10.0, 0.0),
+        }),
+        Edge::new(
+            EdgeSegment::Cubic {
+                c1: Point2::new(10.0, 10.0),
+                c2: Point2::new(20.0, 20.0),
+                to: Point2::new(30.0, 20.0),
+            },
+            Join::Smooth,
+        ),
+        Edge::corner(EdgeSegment::Line { to: start }),
+    ];
+
+    let err = SeamPath::with_joins(start, edges).expect_err("a 90 degree turn is not smooth");
+    match err {
+        GeometryError::SmoothJoinNotTangent {
+            join,
+            sine,
+            reversed,
+        } => {
+            assert_eq!(join, 1);
+            assert!(sine > 0.5, "a right angle has sine 1, got {sine}");
+            assert!(!reversed);
+        }
+        other => panic!("wrong error: {other:?}"),
+    }
+}
+
+#[test]
+fn a_smooth_claim_across_a_reversal_is_refused_even_though_it_is_collinear() {
+    let start = Point2::new(0.0, 0.0);
+    // Edge 0 ends heading +x. Edge 1's c1 heads -x: parallel, opposite sign.
+    // The sine is ~0, so only the direction check catches this one.
+    let edges = vec![
+        Edge::corner(EdgeSegment::Line {
+            to: Point2::new(10.0, 0.0),
+        }),
+        Edge::new(
+            EdgeSegment::Cubic {
+                c1: Point2::new(5.0, 0.0),
+                c2: Point2::new(20.0, 10.0),
+                to: Point2::new(30.0, 20.0),
+            },
+            Join::Smooth,
+        ),
+        Edge::corner(EdgeSegment::Line { to: start }),
+    ];
+
+    let err = SeamPath::with_joins(start, edges).expect_err("a cusp is not smooth");
+    match err {
+        GeometryError::SmoothJoinNotTangent { join, reversed, .. } => {
+            assert_eq!(join, 1);
+            assert!(reversed, "the tangents are anti-parallel");
+        }
+        other => panic!("wrong error: {other:?}"),
+    }
+}
+
+#[test]
+fn a_degenerate_handle_with_a_smooth_claim_errors_rather_than_becoming_a_corner() {
+    let start = Point2::new(0.0, 0.0);
+    // c1 sits exactly on the cubic's own start, so the outgoing tangent is
+    // the zero vector and "smooth" has no meaning. Silently treating that as
+    // a corner would store a claim nobody checked.
+    let edges = vec![
+        Edge::corner(EdgeSegment::Line {
+            to: Point2::new(10.0, 0.0),
+        }),
+        Edge::new(
+            EdgeSegment::Cubic {
+                c1: Point2::new(10.0, 0.0),
+                c2: Point2::new(20.0, 10.0),
+                to: Point2::new(30.0, 20.0),
+            },
+            Join::Smooth,
+        ),
+        Edge::corner(EdgeSegment::Line { to: start }),
+    ];
+
+    let err = SeamPath::with_joins(start, edges).expect_err("no tangent, no claim");
+    assert!(matches!(
+        err,
+        GeometryError::SmoothJoinUndefinedTangent { join: 1 }
+    ));
+}
+
+#[test]
+fn a_corner_claim_is_never_checked_however_sharp_it_is() {
+    // The absence of a claim cannot be false. A square is all corners and
+    // must construct without any tangent arithmetic running against it.
+    let start = Point2::new(0.0, 0.0);
+    SeamPath::new(
+        start,
+        vec![
+            EdgeSegment::Line {
+                to: Point2::new(10.0, 0.0),
+            },
+            EdgeSegment::Line {
+                to: Point2::new(10.0, 10.0),
+            },
+            EdgeSegment::Line {
+                to: Point2::new(0.0, 10.0),
+            },
+            EdgeSegment::Line { to: start },
+        ],
+    )
+    .expect("a square is four legal corners");
+}
+
+#[test]
+fn a_falsely_smooth_path_cannot_be_smuggled_in_through_a_file() {
+    // C6: serde routes through the validating constructor, so a hand-edited
+    // document gets the same refusal an API caller gets.
+    let json = r#"{
+        "start": {"x": 0.0, "y": 0.0},
+        "edges": [
+            {"geometry": {"kind": "line", "to": {"x": 10.0, "y": 0.0}}, "join": "corner"},
+            {"geometry": {"kind": "line", "to": {"x": 10.0, "y": 10.0}}, "join": "smooth"},
+            {"geometry": {"kind": "line", "to": {"x": 0.0, "y": 0.0}}, "join": "corner"}
+        ]
+    }"#;
+    let err = serde_json::from_str::<SeamPath>(json).expect_err("a right angle is not smooth");
+    assert!(err.to_string().contains("smooth"), "{err}");
+}
