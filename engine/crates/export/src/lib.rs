@@ -572,6 +572,22 @@ mod tests {
     }
 
     #[test]
+    fn a_coordinate_past_any_paper_is_refused_rather_than_panicking() {
+        // The sibling test above uses 20m, which a person could plausibly
+        // type. This one uses a billion kilometres, which they could not —
+        // it is what a corrupt file or a bad import looks like, and
+        // `PatternBoundary` accepts it because it is finite.
+        //
+        // The piece still has a valid cut line, so the refusal has to come
+        // from the tile count, which is where the arithmetic used to give
+        // out before the check that reads it ever ran.
+        let piece = rect_piece("Corrupt", 1.0e12, 1.0e12);
+        let err = export_tiled_pdf(&[&piece], &PageLayout::a4()).unwrap_err();
+        assert!(matches!(err, ExportError::TooManyTiles { .. }), "{err:?}");
+        assert!(err.to_string().contains("check the piece's units"), "{err}");
+    }
+
+    #[test]
     fn every_sheet_carries_a_calibration_square() {
         let piece = rect_piece("Wide", 600.0, 500.0);
         let pdf = export_tiled_pdf(&[&piece], &PageLayout::a4()).expect("exports");

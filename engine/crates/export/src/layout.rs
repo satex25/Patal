@@ -276,12 +276,18 @@ impl TileGrid {
     /// absorbs the case where the extent is an exact multiple of the advance
     /// and binary floating point lands a hair over it — without it, a piece
     /// exactly 190mm wide on a 190mm window picks up a second, empty sheet.
+    ///
+    /// The count saturates rather than wrapping. A float-to-integer cast in
+    /// Rust already saturates, but the `+ 1` after it does not, and a piece
+    /// whose coordinates are absurd must arrive at [`ExportError::TooManyTiles`]
+    /// rather than at arithmetic that panics on the way there.
     pub fn cover(bounds: BoundsMm, layout: PageLayout) -> Self {
         let count = |extent: Mm, window: Mm, advance: Mm| -> usize {
             if extent.get() <= window.get() + 1e-9 {
                 return 1;
             }
-            (((extent.get() - window.get()) / advance.get()) - 1e-9).ceil() as usize + 1
+            ((((extent.get() - window.get()) / advance.get()) - 1e-9).ceil() as usize)
+                .saturating_add(1)
         };
 
         Self {
@@ -295,8 +301,17 @@ impl TileGrid {
         }
     }
 
+    /// How many sheets this piece takes.
+    ///
+    /// Saturating, not wrapping, and the distinction is the whole point of
+    /// [`MAX_TILES_PER_PIECE`]. A piece authored in the wrong units can need
+    /// more sheets than a `usize` can count: `columns * rows` then panics in
+    /// debug, and in release it *wraps* — where the wrapped product can land
+    /// under the limit and wave the piece through the one guard that exists
+    /// to catch exactly that mistake. Saturating keeps the answer above the
+    /// limit, which is the only property the check needs from it.
     pub fn tiles(self) -> usize {
-        self.columns * self.rows
+        self.columns.saturating_mul(self.rows)
     }
 
     /// The model coordinate that lands on the bottom-left of the drawable
@@ -463,6 +478,24 @@ mod tests {
                 "column {c} shares {shared:?}"
             );
         }
+    }
+
+    #[test]
+    fn a_tile_count_past_what_a_usize_can_hold_saturates_rather_than_wrapping() {
+        // 1e12 mm is a billion kilometres — what a corrupted or hand-edited
+        // coordinate looks like, since `PatternBoundary` accepts any finite
+        // f64. That is about 5.5e9 columns by 5.5e9 rows, and their product
+        // does not fit in a `usize`.
+        //
+        // The bare `columns * rows` this replaced panicked here in debug and
+        // wrapped in release, and a wrapped product can land *below*
+        // MAX_TILES_PER_PIECE — turning the units guard into the thing that
+        // lets the piece through to a print job of billions of pages.
+        let grid = TileGrid::cover(bounds(1.0e12, 1.0e12), PageLayout::a4());
+        assert!(grid.columns > 1_000_000_000);
+        assert!(grid.rows > 1_000_000_000);
+        assert_eq!(grid.tiles(), usize::MAX);
+        assert!(grid.tiles() > MAX_TILES_PER_PIECE);
     }
 
     #[test]

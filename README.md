@@ -81,9 +81,10 @@ This is a foundation, not a product yet. What's real today, and what isn't:
   `EdgeSegment` are authored, `flatten` discretizes them, and the kernel is
   untouched ([ADR-003](docs/adr/ADR-003-curve-representation.md)). Materials
   have stable identity and a project carries a document schema version
-  ([ADR-004](docs/adr/ADR-004-document-format.md)). 89 unit tests plus a
-  property suite and a closed-form curve oracle, `cargo clippy --workspace
-  --all-targets -- -D warnings` clean, `cargo deny` clean on all four checks.
+  ([ADR-004](docs/adr/ADR-004-document-format.md)). 136 tests across the
+  workspace — unit tests, a property suite, and a closed-form curve oracle —
+  `cargo clippy --workspace --all-targets -- -D warnings` clean, `cargo deny`
+  clean on all four checks.
 - `patal-export`: tiled PDF at true scale. A millimetre in the model is a
   millimetre on the paper — there is no scale parameter and no fit-to-page,
   `Mm` and `Pt` are distinct types with exactly one conversion between them,
