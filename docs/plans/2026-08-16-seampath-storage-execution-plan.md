@@ -2731,7 +2731,9 @@ reconciliation findings.
 - [ ] `RUSTDOCFLAGS="-D warnings" cargo doc --no-deps --workspace` clean
 - [ ] `apps/desktop` compiles under `-D warnings`
 - [ ] CI `native` job green
-- [ ] All 31 pre-existing `geometry/src/lib.rs` tests pass **unmodified** (`git diff --stat` on that file shows only the two error variants and their `Display` arms)
+- [ ] All **30** pre-existing `geometry/src/lib.rs` tests pass **unmodified** (`git diff --stat` on that file shows only the two error variants, their `Display` arms, and the one-line re-export)
+  - *Corrected 2026-08-16.* The blueprint says 31 and this plan copied it; the tree says 30, on `main` and on the wave branch alike, and `tests/properties.rs`'s own header has said 30 all along. Verified by counting `#[test]` in the file on both sides — identical, and the diff touches none of them. Chasing the missing 31st would be chasing a number that was never there.
+  - *Also corrected.* The diff has **three** hunks, not two. `SMOOTH_JOIN_RELATIVE` is part of Task 2's stated public interface, so it joins the `pub use curves::{…}` re-export — the same one-line class of change Task 1 made for `Edge`. Its doc comment mentions `CLOSURE_SNAP_RELATIVE` without an intra-doc link, deliberately: that constant is private, and linking a public item's docs to it fails the rustdoc gate under `-D warnings`.
 - [ ] proptest: `lift(b).flatten(t)` bit-identical, zero panics across all generators
 - [ ] v1 fixture migrates; migrated outline flattens bit-identical to the v1 boundary
 - [ ] Save → load → `cut_boundary` yields identical points
