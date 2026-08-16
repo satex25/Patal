@@ -753,11 +753,35 @@ authoritative and `cut_boundary()` becomes a function of outline *and* darts. K3
 the evidence as a side effect of drafting a bodice block, which cannot be done without a
 bust dart. Do not decide this before K3.
 
+> **Format-level evidence landed 2026-08-16** —
+> [the incumbent persistence probe](incumbent-persistence-probe.md). **Neither incumbent
+> models a dart as an object.** Seamly2D persists three point references consumed by a
+> `trueDarts` *tool*; Freesewing's core and all sixteen plugins contain the string `dart`
+> zero times. This does **not** decide Decision 2, and the instruction above stands. What
+> it changes is the question K3 has to answer: a third option — dart as a *derived
+> operation in the dependency graph*, which is how Seamly2D gets propagation without a
+> dart type — was not on this list and is the one worth discriminating against option 1.
+
 **Decision 3 — does material belong to the piece or to the cut? (P-21, with P-17 and P-20)**
 If a piece can be cut more than once, `PatternPiece.material` is demoted from a field to a
 default and a `CutInstruction` entity appears. A bodice block is unlined, so this wave may
 produce no evidence at all — in which case K6's honest output is "undecided, here is what
 would settle it", not a verdict formed on taste.
+
+> **Evidence landed 2026-08-16, and the escape hatch above is not needed** —
+> [the incumbent persistence probe](incumbent-persistence-probe.md). **Both incumbents
+> converge on the shape this row predicted**, independently and before either was opened:
+> a per-piece *list* of cut instructions carrying material, quantity and a fold flag.
+> Freesewing has it now (`cutlist.addCut`). Seamly2D had it for eighteen schema versions
+> as `<mcp>` — Material, Cut number, Placement, with a role enum — **and deleted it in
+> v0.6.0**, migrating the structure into label prose and silently dropping the per-cut
+> quantity on the way. The shape is confirmed; the withdrawal is a warning, and **why it
+> was withdrawn is now the highest-value open question in this area**. Two riders:
+> a `CutInstruction` must carry a `MaterialId` rather than a name (Freesewing's untyped
+> slot produces a silent wrong-material bug in its own corpus, which
+> [ADR-004](../adr/ADR-004-document-format.md) already forecloses), and quantity must sit
+> on the cut — Seamly2D's surviving piece-label `quantity` is the degraded residue of
+> exactly that field being dropped.
 
 Everything else — P-06, P-14, P-16, P-17, P-22, P-29 — is a fold-in that costs one optional
 field and blocks nothing.
@@ -803,6 +827,24 @@ the file and what it is called there.
 **Absence is a finding and gets the same rigour.** "Searched the saved file for `notch`,
 `nadsechka`, and every element added between baseline and second save; not present" is a
 result. "Could not find it" is not.
+
+> **A third route exists for Seamly2D, and was taken on 2026-08-16 for two rows** —
+> [the incumbent persistence probe](incumbent-persistence-probe.md). Seamly2D ships
+> **versioned XSDs** for its pattern file (49 of them; `v0.7.4` is current), plus a
+> converter that migrates between them, so the format can be read directly rather than
+> sampled by diff. On coverage that is strictly stronger — a schema enumerates every
+> element the format can hold, where a diff finds only what the operator thought to draw —
+> and reading *all* the versions plus the converter additionally shows what the format
+> **used to** hold and why it stopped, which no diff of the current version could surface.
+> That is where the probe's most important finding came from. On behaviour it is strictly
+> weaker: it cannot say what the application actually writes, or whether a construct is
+> reachable from the UI. **It does not retire the diff protocol above**; it front-runs it
+> for questions of the form "does this element exist at all", which is the form both
+> freeze decisions take.
+>
+> One caution the probe learned the hard way and paid for with a wrong first draft:
+> **reading the newest schema is not reading the format.** Its first conclusion on
+> Decision 3 was reversed by reading the older versions and the converter.
 
 ## Pre-registered guesses about the incumbents
 

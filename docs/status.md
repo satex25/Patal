@@ -1,13 +1,55 @@
 ---
 title: Status
 tags: [status]
-updated: 2026-08-14
+updated: 2026-08-16
 ---
 
-# Status — 2026-08-14
+# Status — 2026-08-16
 
 Single source of truth for where the work is. Update at the end of each session;
 if this disagrees with any other note, this wins.
+
+## Right now — 2026-08-16
+
+**Tree.** `main` at `4abf281`. Local branch `tile-count-saturates` sits one commit ahead
+at `155894e` (tile-count overflow fix, unpushed, has never seen CI). `seampath-edge-container`
+is merged and still present locally. Working tree clean.
+
+**Verified this cycle**, from a clean checkout of `155894e` on Linux / Rust 1.97.1:
+`cargo fmt --check` clean · **135 tests pass** across the workspace · `cargo clippy
+--workspace --all-targets -D warnings` clean. Nothing was found broken.
+
+**What landed.** [The incumbent persistence probe](analysis/incumbent-persistence-probe.md)
+— citation-grade evidence on the two rows that gate the v2 freeze, read from Seamly2D's
+versioned XSD and source (`d6e7562`) and Freesewing's core and plugin trees (`8a8de5a`,
+core v4.0.0). Two results:
+
+- **Neither incumbent models a dart as an object.** Seamly2D persists three point
+  references consumed by a `trueDarts` *tool*; Freesewing's core and all sixteen plugins
+  contain `dart` zero times, while its designs contain it 194 times. Decision 2 stays
+  open per the census's own instruction, but a third option now exists on the list —
+  dart as a derived operation in the dependency graph — and it is the one K3 should
+  discriminate against "dart as object".
+- **Material belongs to the cut — both incumbents converge on the shape the census
+  predicted, and one of them withdrew from it.** Freesewing's `cutlist.addCut` stores a
+  *list* of `{cut, identical, onBias, onFold}` per material per part. Seamly2D shipped the
+  same idea as `<mcp>` (Material, Cut number, Placement, with a role enum) across eighteen
+  schema versions and **deleted it in v0.6.0**, migrating it into label prose and silently
+  dropping the per-cut quantity — a lossy document migration of exactly the kind
+  `patal-pattern` says must be loud. Decision 3's "we may get no evidence" escape hatch is
+  no longer needed; **why Seamly2D withdrew is now the highest-value open question in this
+  area**, and it is a history read rather than a drafting session.
+
+**The probe is not K3.** No block has been drafted in either tool, no friction log exists,
+and ADR-006 still must not be written from a census. Three of the four guesses it could
+score were low-risk ones about whether a mature tool has features; G6 — the guess most
+worth being wrong about — is barely tested.
+
+**One thing this cycle got wrong before it got it right**, recorded because the census's
+discipline is that being wrong stays visible: the probe's first draft concluded from the
+current schema alone that Seamly2D "never modelled material as data". An adversarial
+review pass against the sources reversed it. Reading the newest schema is not reading the
+format.
 
 ## Documentation consolidated — 2026-08-13
 
@@ -24,7 +66,7 @@ committing them would have recorded broken gitlinks. And the duplicate working c
 gone: `C:\Users\User\Desktop\patal` is now a directory junction pointing at
 `C:\Users\User\patal`, so both paths are the same repository and cannot drift.
 
-## Right now
+## Where it stood — 2026-08-14
 
 **Merged and green.** The export wave landed on `main` via PR #1
 (`a9e7f1c`, 2026-08-14). All five CI jobs pass on the merge commit — engine (ubuntu),
@@ -131,6 +173,11 @@ bodice block produces it as a side effect.
    settled before any file leaves this machine. The
    [primitive census](analysis/pattern-primitives.md) narrows what the freeze has to get
    right to three decisions; the rest is additive and must not hold the door.
+   **Decision 1 taken 2026-08-15** (the edge container). **Decision 3 now has evidence**
+   and is a drafting question rather than a research one — see
+   [the persistence probe](analysis/incumbent-persistence-probe.md). **Decision 2 is the
+   one thing still genuinely blocked on K3**, and it is therefore the critical path to
+   the freeze.
 2. **Look at Seamly2D and Freesewing properly**, then write ADR-006. There is no
    competitive analysis anywhere in this project, and on the axis Pātāl currently
    competes on it is behind a free thirteen-year-old incumbent. The
