@@ -310,12 +310,31 @@ impl PatternPiece {
     }
 }
 
+/// The flattening tolerance a new project starts with, in millimetres.
+///
+/// 0.01mm against ADR-003's 0.4mm industrial-cutter figure: forty times finer
+/// than any cutter can execute and far finer than cloth can hold. The last
+/// wave measured this exact tolerance at roughly 1% of a 120Hz frame for one
+/// piece's full drag path, so it is affordable on evidence rather than on
+/// assertion.
+///
+/// There is deliberately **no upper bound**. A tolerance of 1e9 turns every
+/// curve into a straight line, which is useless but not *wrong* in the
+/// correct-or-loud sense, and inventing a ceiling means inventing a number.
+/// Revisit if a real user ever sets one.
+pub const DEFAULT_FLATTEN_TOLERANCE_MM: f64 = 0.01;
+
+fn default_flatten_tolerance() -> f64 {
+    DEFAULT_FLATTEN_TOLERANCE_MM
+}
+
 /// A garment project: its pieces and the body measurements driving them.
 ///
-/// No invariant of its own to protect on the wire — each `PatternPiece`
-/// already validates itself on deserialization, so a plain derive here is
-/// enough; `Project` doesn't need to re-check what its elements guarantee.
-#[derive(Debug, Default, Clone, Serialize, Deserialize)]
+/// Each [`PatternPiece`] validates itself on deserialization, so the project
+/// does not re-check what its elements guarantee. It does own two things they
+/// cannot: whether their material references resolve, and the flattening
+/// tolerance every derived cut line in the document is computed at.
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(try_from = "ProjectData", into = "ProjectData")]
 pub struct Project {
     pub name: String,
@@ -326,18 +345,59 @@ pub struct Project {
     /// it, which is the whole point of the change away from embedded
     /// copies.
     pub materials: MaterialLibrary,
+    /// How finely authored curves are flattened before anything is cut.
+    ///
+    /// Private with a validated setter, and persisted: the tolerance is the
+    /// entire contract between an authored curve and the polygon a cutter
+    /// follows, so a document that did not carry it would produce a different
+    /// cut line on reload. That is precisely the silent difference C1 exists
+    /// to forbid.
+    flatten_tolerance_mm: f64,
 }
 
 /// The wire shape of a [`Project`]. Identical to the type — the validation
 /// is not about the fields, it is about whether the references between them
 /// resolve.
-#[derive(Debug, Default, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 struct ProjectData {
     name: String,
     pieces: Vec<PatternPiece>,
     measurements: Vec<Measurement>,
     #[serde(default)]
     materials: MaterialLibrary,
+    #[serde(default = "default_flatten_tolerance")]
+    flatten_tolerance_mm: f64,
+}
+
+/// Hand-written, because the derived one produces `0.0` — a tolerance
+/// `set_flatten_tolerance_mm` refuses. A derive here would mint an invalid
+/// project through a path that never runs the validator, which is a C1
+/// violation created by four characters nobody would think to look at.
+impl Default for Project {
+    fn default() -> Self {
+        Self {
+            name: String::new(),
+            pieces: Vec::new(),
+            measurements: Vec::new(),
+            materials: MaterialLibrary::default(),
+            flatten_tolerance_mm: DEFAULT_FLATTEN_TOLERANCE_MM,
+        }
+    }
+}
+
+/// Same trap, one level down: `ProjectData` is where `#[serde(default)]`
+/// reaches for a default during deserialization, so the derive would fire
+/// here without any obvious call site to notice it at.
+impl Default for ProjectData {
+    fn default() -> Self {
+        Self {
+            name: String::new(),
+            pieces: Vec::new(),
+            measurements: Vec::new(),
+            materials: MaterialLibrary::default(),
+            flatten_tolerance_mm: DEFAULT_FLATTEN_TOLERANCE_MM,
+        }
+    }
 }
 
 impl From<Project> for ProjectData {
@@ -347,6 +407,7 @@ impl From<Project> for ProjectData {
             pieces: project.pieces,
             measurements: project.measurements,
             materials: project.materials,
+            flatten_tolerance_mm: project.flatten_tolerance_mm,
         }
     }
 }
@@ -355,12 +416,16 @@ impl TryFrom<ProjectData> for Project {
     type Error = PatternError;
 
     fn try_from(data: ProjectData) -> Result<Self, Self::Error> {
-        let project = Project {
+        let mut project = Project {
             name: data.name,
             pieces: data.pieces,
             measurements: data.measurements,
             materials: data.materials,
+            flatten_tolerance_mm: DEFAULT_FLATTEN_TOLERANCE_MM,
         };
+        // Through the setter, not assigned: a file is exactly where an
+        // invalid tolerance arrives from.
+        project.set_flatten_tolerance_mm(data.flatten_tolerance_mm)?;
         project.check_material_references()?;
         Ok(project)
     }
@@ -373,7 +438,29 @@ impl Project {
             pieces: Vec::new(),
             measurements: Vec::new(),
             materials: MaterialLibrary::new(),
+            flatten_tolerance_mm: DEFAULT_FLATTEN_TOLERANCE_MM,
         }
+    }
+
+    /// How finely this project's curves are flattened before anything derived
+    /// from them is cut.
+    pub fn flatten_tolerance_mm(&self) -> f64 {
+        self.flatten_tolerance_mm
+    }
+
+    /// Sets the flattening tolerance, refusing values that cannot describe a
+    /// curve. Reuses the geometry crate's own error so one condition has one
+    /// name across both layers.
+    pub fn set_flatten_tolerance_mm(&mut self, value_mm: f64) -> Result<(), PatternError> {
+        if !value_mm.is_finite() || value_mm <= 0.0 {
+            return Err(PatternError::Geometry(
+                GeometryError::ToleranceNotPositive {
+                    tolerance_mm: value_mm,
+                },
+            ));
+        }
+        self.flatten_tolerance_mm = value_mm;
+        Ok(())
     }
 
     /// The material a piece will be cut from, resolved against this
@@ -523,6 +610,47 @@ mod tests {
             Point2::new(0.0, side),
         ])
         .expect("square is a valid boundary")
+    }
+
+    #[test]
+    fn a_default_project_carries_a_usable_tolerance() {
+        // The trap this test exists for: a derived Default would produce 0.0,
+        // which set_flatten_tolerance_mm refuses — so Project::default()
+        // would mint a project the validator would have rejected, through a
+        // path that never runs it.
+        let project = Project::default();
+        assert_eq!(project.flatten_tolerance_mm(), DEFAULT_FLATTEN_TOLERANCE_MM);
+        assert!(project.flatten_tolerance_mm() > 0.0);
+    }
+
+    #[test]
+    fn a_project_deserialized_without_a_tolerance_key_still_gets_a_valid_one() {
+        // Fires through ProjectData's serde defaults, one level below the
+        // obvious call site.
+        let json = r#"{"name": "Blouse", "pieces": [], "measurements": []}"#;
+        let project: Project = serde_json::from_str(json).expect("loads");
+        assert_eq!(project.flatten_tolerance_mm(), DEFAULT_FLATTEN_TOLERANCE_MM);
+    }
+
+    #[test]
+    fn a_tolerance_that_cannot_describe_a_curve_is_refused() {
+        let mut project = Project::new("Blouse");
+        for bad in [0.0, -1.0, f64::NAN, f64::INFINITY] {
+            assert!(
+                project.set_flatten_tolerance_mm(bad).is_err(),
+                "{bad} accepted"
+            );
+        }
+        assert_eq!(project.flatten_tolerance_mm(), DEFAULT_FLATTEN_TOLERANCE_MM);
+    }
+
+    #[test]
+    fn a_tolerance_survives_the_file() {
+        let mut project = Project::new("Blouse");
+        project.set_flatten_tolerance_mm(0.05).expect("valid");
+        let json = serde_json::to_string(&project).expect("serializes");
+        let restored: Project = serde_json::from_str(&json).expect("loads");
+        assert_eq!(restored.flatten_tolerance_mm(), 0.05);
     }
 
     #[test]
