@@ -70,6 +70,28 @@ PATAL_CARGO_DIR=C:\Users\User\patal\apps\desktop\src-tauri cmd //c 'C:\Users\Use
 green: fmt clean, clippy clean, **136 tests pass** (135 unit and integration, plus one
 doc-test).
 
+**Corrected baseline (2026-08-16).** 136 is the count on `tile-count-saturates`, which is
+not merged. A wave branch cut from `main` starts two lower, so Task 1 finished at **138**,
+not the 139 this plan projected. Task 2's projected 145 is therefore 144. From Task 3
+onward the projections are correct again, because Task 3 landed three properties rather
+than two — see that task. Every count from Task 3 to Task 6 was hit exactly: 147, 154, 157,
+161.
+
+**Execution status (2026-08-16).** Tasks 1–6 are complete and committed on
+`seampath-storage-wave`, all five gates green at each one:
+
+| Task | Commit | Tests after |
+|---|---|---|
+| 1 — `Edge` container | `1d5e5d5` | 138 |
+| 2 — `Smooth` validated | `714322c` | 144 |
+| 3 — the lift | `422bcde` | 147 |
+| 4 — `GrainLine` | `f9405c7` | 154 |
+| 5 — `PieceId` | `065d860` | 157 |
+| 6 — flatten tolerance | `c071f47` | 161 |
+
+The wave now sits at the ⛔ **D6** gate below. Task 7 is the first task that cannot start
+without an operator answer.
+
 ---
 
 ## Reconciliation findings — read before Task 1
@@ -863,11 +885,13 @@ Insert into `SeamPath::with_joins`, after the `PathNotClosed` check and before
             let dot = ix * ox + iy * oy;
             let sine = cross.abs() / (ix.hypot(iy) * ox.hypot(oy));
 
-            if sine > SMOOTH_JOIN_RELATIVE || dot <= 0.0 {
+            // `reversed` means a cusp — parallel but pointing opposite ways —
+            // so it is `dot < 0`, not `dot <= 0`. See the correction below.
+            if sine > SMOOTH_JOIN_RELATIVE || dot < 0.0 {
                 return Err(GeometryError::SmoothJoinNotTangent {
                     join: index,
                     sine,
-                    reversed: dot <= 0.0,
+                    reversed: dot < 0.0,
                 });
             }
         }
@@ -877,13 +901,24 @@ Note the loop `continue`s on `Corner` before any arithmetic runs. A corner claim
 false, so it is never checked however sharp the angle is — which is what the square test in
 Step 1 pins.
 
+**CORRECTION, made while executing (2026-08-16).** This snippet originally read
+`dot <= 0.0` in both the condition and the `reversed` field. That contradicts Step 1's own
+`a_smooth_claim_the_coordinates_contradict_is_refused`, which builds a perpendicular join
+and asserts `!reversed`. A perpendicular join has `dot == 0.0` exactly, so the original
+snippet labelled a right angle a cusp and that test failed. The test is right; the snippet
+was wrong. The strict comparison loses nothing: `dot == 0` with two non-zero tangents
+implies `sine == 1`, which always exceeds the threshold, so the join is still refused — by
+the sine branch, where it belongs. The two rejection reasons are now disjoint rather than
+overlapping.
+
 - [ ] **Step 6: Run the tests**
 
 ```bash
 cmd //c 'C:\Users\User\patal\scripts\cargo.bat test --workspace --locked'
 ```
 
-Expected: PASS, **145 tests** (139 from Task 1 + 6 new).
+Expected: PASS, **144 tests** (138 from Task 1 + 6 new). The plan originally projected 145
+from a 139-test Task 1; see the corrected baseline note under "Baseline at plan time".
 
 - [ ] **Step 7: Verify the container earned its keep**
 
@@ -956,6 +991,18 @@ proptest! {
 If `any_boundary()` does not already exist in that file, reuse whatever generator the
 existing properties use for a valid `PatternBoundary` and name it in the two tests above
 rather than writing a second generator.
+
+**AS EXECUTED (2026-08-16).** `any_boundary()` does not exist. The generator is
+`convex_boundary()`, which yields `Option<PatternBoundary>` and needs the
+`let Some(boundary) = boundary else { return Ok(()) };` idiom the file already uses.
+
+**A third property was added, and it matters.** `convex_boundary()` generates only convex
+shapes — it exists because `offset` needs inputs whose answer is guaranteed. The lift has
+no such requirement, and S4 claims bit-identity for *every* valid boundary, so
+convex-only would have under-tested the headline claim of the wave.
+`the_lift_is_bit_identical_on_boundaries_that_are_not_convex` runs the same assertion over
+the existing `point_soup()` generator, filtered through `PatternBoundary::new(..).ok()`,
+which covers concave and self-crossing boundaries. Still no new generator.
 
 - [ ] **Step 2: Run the property to verify it fails**
 
@@ -1039,7 +1086,9 @@ will look like one in review, so mention it in the commit message if it moved.
 cmd //c 'C:\Users\User\patal\scripts\cargo.bat test --workspace --locked'
 ```
 
-Expected: PASS, **147 tests** (145 from Task 2 + 2 new properties).
+Expected: PASS, **147 tests** (144 from Task 2 + 3 new properties). This number is right
+even though Task 2's was not — the extra property absorbs the one-test baseline drift, and
+every count from here to Task 6 lands exactly as projected.
 
 - [ ] **Step 7: Commit**
 
@@ -1403,8 +1452,31 @@ Expected: PASS, **157 tests**. Note that `PatternPieceData` now round-trips an `
 existing test asserting an exact serialized shape for a piece needs its expectation updated
 — update the expectation, never the assertion's intent.
 
+**AS EXECUTED (2026-08-16), two things this step does not tell you:**
+
+1. **`--locked` fails before the lockfiles move,** with "cannot update the lock file …
+   because --locked was passed". Adding a dependency means running
+   `cargo check --workspace` once first. Do not reach for `--offline` or drop `--locked`;
+   the lock is meant to move here.
+2. **There are two lockfiles, not one.** `apps/desktop/src-tauri` is its own workspace with
+   its own `Cargo.lock`, so the fifth gate fails identically until it is updated the same
+   way. The `git add` below covers both.
+3. **The test that breaks is named.** `deserializing_negative_seam_allowance_is_rejected`
+   carries a JSON literal in the old wire shape; it now fails on the missing `id` before it
+   ever reaches the seam-allowance validator. Fix the fixture by adding an `"id"` key with
+   any valid UUID string. Its intent — a hand-edited file cannot skip validation — holds
+   exactly as written, so the assertion does not move. Same failure class as Task 1's
+   `a_hand_edited_open_path_cannot_be_deserialized`.
+
+**One design point the plan left implicit:** `id` is a *required* field on the wire, not
+`#[serde(default)]`. That is the opposite of `join`'s treatment and the asymmetry is
+deliberate — `Corner` is the absence of a claim so defaulting it invents nothing, whereas
+minting an id for a v2 file that omitted one would give that piece a different identity on
+every load. v1 files have no ids, but that is the migration's job (Task 8), not serde's.
+
 ```bash
-git add engine/crates/pattern/Cargo.toml engine/crates/pattern/src/lib.rs engine/Cargo.lock
+git add engine/crates/pattern/Cargo.toml engine/crates/pattern/src/lib.rs \
+        engine/Cargo.lock apps/desktop/src-tauri/Cargo.lock
 git commit -m "Give a piece an identity its name cannot carry"
 ```
 
