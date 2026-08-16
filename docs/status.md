@@ -16,8 +16,13 @@ at `155894e` (tile-count overflow fix, unpushed, has never seen CI). `seampath-e
 is merged and still present locally. Working tree clean.
 
 **Verified this cycle**, from a clean checkout of `155894e` on Linux / Rust 1.97.1:
-`cargo fmt --check` clean · **135 tests pass** across the workspace · `cargo clippy
---workspace --all-targets -D warnings` clean. Nothing was found broken.
+`cargo fmt --check` clean · **136 tests pass** across the workspace — 135 unit and
+integration, plus one doc-test · `cargo clippy --workspace --all-targets -D warnings`
+clean. Nothing was found broken.
+
+The breakdown is spelled out because the two numbers are both defensible and the repo
+had them disagreeing: `cargo test` reports 136, of which the doc-test is one. Quote the
+total and say what is in it, rather than picking whichever count a given sentence needs.
 
 **What landed.** [The incumbent persistence probe](analysis/incumbent-persistence-probe.md)
 — citation-grade evidence on the two rows that gate the v2 freeze, read from Seamly2D's
