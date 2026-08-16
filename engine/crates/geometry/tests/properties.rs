@@ -16,7 +16,7 @@
 //! can only reach the public API, which is exactly the surface whose
 //! contract these properties describe.
 
-use patal_geometry::{GeometryError, PatternBoundary, Point2, Winding};
+use patal_geometry::{GeometryError, Join, PatternBoundary, Point2, SeamPath, Winding};
 use proptest::prelude::*;
 
 /// Coordinates stay inside a plausible garment-scale envelope. Extreme
@@ -327,4 +327,60 @@ fn a_dart_apex_reaches_the_self_intersection_branch() {
     };
     assert_eq!(distance_mm, 1.0);
     assert_eq!(edges, (3, 5));
+}
+
+proptest! {
+    /// The headline property of the whole wave.
+    ///
+    /// Bit-identical, not within-epsilon. The lift performs no float
+    /// arithmetic — it moves existing coordinates into a new container — so
+    /// flattening it back must reproduce the input exactly, at every
+    /// tolerance. If this ever needs an epsilon, the lift has acquired
+    /// arithmetic that does not belong in it.
+    #[test]
+    fn lifting_a_boundary_and_flattening_it_back_is_bit_identical(
+        boundary in convex_boundary(),
+        tolerance in 1.0e-6f64..100.0f64,
+    ) {
+        let Some(boundary) = boundary else { return Ok(()) };
+        let lifted = SeamPath::from_boundary(&boundary);
+        let flattened = lifted.flatten(tolerance).expect("a lifted polygon always flattens");
+        prop_assert_eq!(flattened.points(), boundary.points());
+    }
+
+    /// The headline property again, on boundaries that are not convex.
+    ///
+    /// `convex_boundary()` exists because `offset` needs shapes whose answer
+    /// is guaranteed, but the lift has no such requirement — S4 says *every*
+    /// valid boundary, and a concave or self-crossing one is still valid.
+    /// Reusing `point_soup` rather than writing a generator: whatever
+    /// survives `PatternBoundary::new` is exactly the population this claim
+    /// is about.
+    #[test]
+    fn the_lift_is_bit_identical_on_boundaries_that_are_not_convex(
+        soup in point_soup(),
+        tolerance in 1.0e-6f64..100.0f64,
+    ) {
+        let Ok(boundary) = PatternBoundary::new(soup) else { return Ok(()) };
+        let flattened = SeamPath::from_boundary(&boundary)
+            .flatten(tolerance)
+            .expect("a lifted polygon always flattens");
+        prop_assert_eq!(flattened.points(), boundary.points());
+    }
+
+    /// A lifted polygon is all corners. It has to be: the lift cannot know
+    /// intent the polygon never carried, and inventing a `Smooth` claim would
+    /// be inventing exactly the kind of unverifiable assertion C1 forbids.
+    #[test]
+    fn a_lifted_boundary_claims_no_continuity(boundary in convex_boundary()) {
+        let Some(boundary) = boundary else { return Ok(()) };
+        prop_assert!(SeamPath::from_boundary(&boundary)
+            .edges()
+            .iter()
+            .all(|e| e.join() == Join::Corner));
+        prop_assert_eq!(
+            SeamPath::from_boundary(&boundary).edges().len(),
+            boundary.points().len()
+        );
+    }
 }

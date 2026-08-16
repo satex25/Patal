@@ -364,6 +364,44 @@ impl SeamPath {
         Self::new(start, segments)
     }
 
+    /// Lifts a polygon into an authored path of straight edges.
+    ///
+    /// # Why this does not invent geometry
+    ///
+    /// Appending the closing edge back to `start` looks like exactly what C9
+    /// forbids, and it is worth being explicit about why it is not. A
+    /// [`PatternBoundary`] is *defined* as a closed polygon — the edge from
+    /// its last point back to its first already exists, and
+    /// [`PatternBoundary::perimeter`] has always counted it. This makes that
+    /// edge explicit; it does not create one.
+    ///
+    /// That is different in kind from [`SeamPath::closed`], which spans a gap
+    /// the designer actually left, and which is why *that* function requires
+    /// the caller to opt in and this one does not.
+    ///
+    /// # Why this is infallible
+    ///
+    /// A valid `PatternBoundary` already guarantees at least three finite,
+    /// deduplicated points, which is strictly more than [`SeamPath::new`]
+    /// demands. There is no failure to report, and a `Result` here would be a
+    /// lie about what can go wrong.
+    ///
+    /// No float arithmetic happens anywhere in this function. That is what
+    /// makes the round-trip property in `tests/properties.rs` bit-exact
+    /// rather than approximate.
+    pub fn from_boundary(boundary: &PatternBoundary) -> Self {
+        let points = boundary.points();
+        let start = points[0];
+        let edges = points[1..]
+            .iter()
+            .copied()
+            .chain(std::iter::once(start))
+            .map(|to| Edge::corner(EdgeSegment::Line { to }))
+            .collect();
+
+        Self { start, edges }
+    }
+
     pub fn start(&self) -> Point2 {
         self.start
     }
