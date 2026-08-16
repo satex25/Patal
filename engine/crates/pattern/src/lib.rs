@@ -16,6 +16,10 @@ use patal_geometry::{GeometryError, PatternBoundary, Point2};
 use patal_materials::{Material, MaterialId, MaterialLibrary};
 use serde::{Deserialize, Serialize};
 
+mod grain;
+
+pub use grain::GrainLine;
+
 /// The document schema this build writes and understands.
 ///
 /// Bumped when the shape of a saved project changes incompatibly. It is
@@ -46,6 +50,8 @@ pub enum PatternError {
     MaterialNotFound { piece: String, id: MaterialId },
     /// A document written by a newer build than this one.
     UnsupportedSchemaVersion { found: u32, supported: u32 },
+    /// A grain line whose angle or anchor is not a usable number.
+    InvalidGrainLine { field: &'static str, value: f64 },
 }
 
 impl fmt::Display for PatternError {
@@ -65,6 +71,10 @@ impl fmt::Display for PatternError {
                 "this document is schema version {found}; this build understands \
                  version {supported}. It was written by a newer version of Pātāl."
             ),
+            Self::InvalidGrainLine { field, value } => write!(
+                f,
+                "grain line {field} is {value}, which is not a finite number"
+            ),
         }
     }
 }
@@ -75,7 +85,8 @@ impl std::error::Error for PatternError {
             Self::Geometry(err) => Some(err),
             Self::InvalidSeamAllowance { .. }
             | Self::MaterialNotFound { .. }
-            | Self::UnsupportedSchemaVersion { .. } => None,
+            | Self::UnsupportedSchemaVersion { .. }
+            | Self::InvalidGrainLine { .. } => None,
         }
     }
 }
