@@ -20,6 +20,7 @@ in this documentation:
 | Path | What lives there |
 |---|---|
 | [status.md](status.md) | Current state, what is in flight, what is next |
+| [remaining-work.md](remaining-work.md) | **The checklist.** Every unbuilt task, chunked and ordered by what unblocks what. A living page — ticked as work lands, edited when a line stops being true |
 | [roadmap.md](roadmap.md) | The pillars that are not built yet, and why that is fine |
 | [memorandum.md](memorandum.md) | The founding vision document |
 | [adr/](adr/) | Architecture Decision Records — rules the code must obey |

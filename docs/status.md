@@ -9,9 +9,9 @@ updated: 2026-08-17
 Single source of truth for where the work is. Update at the end of each session;
 if this disagrees with any other note, this wins.
 
-**What is left, in order:**
-[the remaining-work checklist](plans/2026-08-17-remaining-work-checklist.md) — every
-unbuilt task in one place, chunked and ordered by what unblocks what. Start there.
+**What is left, in order:** [remaining-work.md](remaining-work.md) — every unbuilt task in
+one place, chunked and ordered by what unblocks what. A living page, ticked as work lands.
+Start there.
 
 ## Right now — 2026-08-17
 
