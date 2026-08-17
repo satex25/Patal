@@ -9,15 +9,25 @@ updated: 2026-08-17
 Single source of truth for where the work is. Update at the end of each session;
 if this disagrees with any other note, this wins.
 
+**What is left, in order:**
+[the remaining-work checklist](plans/2026-08-17-remaining-work-checklist.md) — every
+unbuilt task in one place, chunked and ordered by what unblocks what. Start there.
+
 ## Right now — 2026-08-17
 
-**Tree.** `main` at `159a639`, with PRs #5 and #6 merged this session — six PRs merged
-total, every one green on all five CI jobs. No open PRs against `main`. The working branch
-is **`seampath-storage-wave`**, nine commits ahead, rebased onto the new `main` (which
-rewrote every hash — anything citing `1d5e5d5`…`c071f47` is pointing at unreachable
-commits). Working tree clean apart from an untracked `_to_delete/` left over from a git
-maintenance incident on 2026-08-16; it holds three zero-byte lock files, a stale bundle and
-two temp pack files, and nothing references it.
+**Tree.** `main` at `78ab201`. PRs #5, #6, #7 and #8 all merged this session — **eight PRs
+merged total, every one green on all five CI jobs, no open PRs, and `main` is the only
+branch** local and remote. `seampath-storage-wave` and `seampath-edge-container` were
+deleted after merging; their commits live on in `main`. Note the wave was rebased before
+merging, so anything citing `1d5e5d5`…`c071f47` points at unreachable commits.
+
+Both `pre-graft-*` tags are intact and must stay that way — they are the only pointers into
+the disjoint pre-graft history, and deleting them is the one irreversible operation in
+routine cleanup.
+
+Working tree clean apart from two untracked entries: `_to_delete/`, debris from a git
+maintenance incident on 2026-08-16 that is verified safe to remove and kept deliberately
+(see the checklist), and `docs/scratchpad.md`, which has never been tracked.
 
 **Verified this cycle**, locally on Windows via `scripts\cargo.bat`, at `c6ac313`:
 `fmt --check` clean · **168 tests pass** across the workspace — 167 unit and integration,
