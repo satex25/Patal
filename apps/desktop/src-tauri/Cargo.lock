@@ -2108,6 +2108,7 @@ dependencies = [
  "patal-geometry",
  "patal-materials",
  "serde",
+ "uuid",
 ]
 
 [[package]]

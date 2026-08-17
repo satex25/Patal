@@ -12,9 +12,14 @@
 
 use std::fmt;
 
-use patal_geometry::{GeometryError, PatternBoundary, Point2};
+use patal_geometry::{GeometryError, PatternBoundary, Point2, SeamPath};
 use patal_materials::{Material, MaterialId, MaterialLibrary};
 use serde::{Deserialize, Serialize};
+use uuid::Uuid;
+
+mod grain;
+
+pub use grain::GrainLine;
 
 /// The document schema this build writes and understands.
 ///
@@ -46,6 +51,8 @@ pub enum PatternError {
     MaterialNotFound { piece: String, id: MaterialId },
     /// A document written by a newer build than this one.
     UnsupportedSchemaVersion { found: u32, supported: u32 },
+    /// A grain line whose angle or anchor is not a usable number.
+    InvalidGrainLine { field: &'static str, value: f64 },
 }
 
 impl fmt::Display for PatternError {
@@ -65,6 +72,10 @@ impl fmt::Display for PatternError {
                 "this document is schema version {found}; this build understands \
                  version {supported}. It was written by a newer version of Pātāl."
             ),
+            Self::InvalidGrainLine { field, value } => write!(
+                f,
+                "grain line {field} is {value}, which is not a finite number"
+            ),
         }
     }
 }
@@ -75,7 +86,8 @@ impl std::error::Error for PatternError {
             Self::Geometry(err) => Some(err),
             Self::InvalidSeamAllowance { .. }
             | Self::MaterialNotFound { .. }
-            | Self::UnsupportedSchemaVersion { .. } => None,
+            | Self::UnsupportedSchemaVersion { .. }
+            | Self::InvalidGrainLine { .. } => None,
         }
     }
 }
@@ -146,6 +158,38 @@ pub struct Measurement {
     pub value_mm: f64,
 }
 
+/// A piece's stable identity, independent of its name.
+///
+/// Copied deliberately from `MaterialId` rather than invented: same UUID
+/// backing, same `serde(transparent)` so it is a plain string on the wire and
+/// `Foundation.UUID` reads it directly, same refusal to implement `Default`.
+///
+/// Names are not identity. Two pieces can legitimately be called "Front", and
+/// grading and export both need to say *which* piece without depending on a
+/// string the designer may rename.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct PieceId(Uuid);
+
+impl PieceId {
+    /// Mints a fresh identity. Deliberately not `Default`: an id should be
+    /// created where a piece is created, never conjured to fill a gap.
+    #[allow(clippy::new_without_default)]
+    pub fn new() -> Self {
+        Self(Uuid::new_v4())
+    }
+
+    pub fn as_uuid(&self) -> Uuid {
+        self.0
+    }
+}
+
+impl fmt::Display for PieceId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
 /// One cuttable piece of a garment: its outline, seam allowance, and the
 /// material it will be cut from.
 ///
@@ -159,8 +203,21 @@ pub struct Measurement {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(try_from = "PatternPieceData", into = "PatternPieceData")]
 pub struct PatternPiece {
+    /// Private, with no setter: an id describes *which* piece this is, and a
+    /// caller able to assign one is a caller able to make two pieces claim to
+    /// be the same piece.
+    id: PieceId,
     pub name: String,
-    pub boundary: PatternBoundary,
+    /// The path the designer drew, not the polygon it flattens to.
+    ///
+    /// Public for the same reason `boundary` was: a [`SeamPath`] cannot be
+    /// constructed invalid, so assignment cannot smuggle in a bad value.
+    ///
+    /// The polygon is *derived*, on demand, at the document's tolerance —
+    /// never stored. Storing both would let a file assert an outline that
+    /// disagrees with its own curves, and there would be no way to tell which
+    /// one the designer meant.
+    pub outline: SeamPath,
     seam_allowance_mm: f64,
     /// A *reference* to a material in the project's library, not a copy.
     ///
@@ -170,25 +227,39 @@ pub struct PatternPiece {
     /// describes would have silently diverged from the pieces cut with
     /// them. Resolve it through [`Project::material_for`].
     pub material: Option<MaterialId>,
+    /// Which way the piece sits on the cloth. `None` means unspecified, which
+    /// is honest: most drafted blocks do not carry one until they are laid up.
+    grain: Option<GrainLine>,
 }
 
 /// The wire shape of a [`PatternPiece`] — everything the constructor plus
 /// the seam-allowance setter need, and nothing that isn't also public API.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct PatternPieceData {
+    id: PieceId,
     name: String,
-    boundary: PatternBoundary,
+    outline: SeamPath,
     seam_allowance_mm: f64,
     material: Option<MaterialId>,
+    /// `default` rather than required: an absent grain line is a piece that
+    /// has not been laid up yet, which is a real state and not a broken file.
+    /// Contrast `id`, which is required — see [`PieceId`].
+    #[serde(default)]
+    grain: Option<GrainLine>,
 }
 
 impl TryFrom<PatternPieceData> for PatternPiece {
     type Error = PatternError;
 
     fn try_from(data: PatternPieceData) -> Result<Self, Self::Error> {
-        let mut piece = PatternPiece::new(data.name, data.boundary);
+        let mut piece = PatternPiece::new(data.name, data.outline);
+        // `new` minted a fresh id; the file's is the real one. Overwriting it
+        // here rather than skipping `new` keeps every other invariant that
+        // constructor establishes in one place.
+        piece.id = data.id;
         piece.set_seam_allowance_mm(data.seam_allowance_mm)?;
         piece.material = data.material;
+        piece.grain = data.grain;
         Ok(piece)
     }
 }
@@ -196,10 +267,12 @@ impl TryFrom<PatternPieceData> for PatternPiece {
 impl From<PatternPiece> for PatternPieceData {
     fn from(piece: PatternPiece) -> Self {
         Self {
+            id: piece.id,
             name: piece.name,
-            boundary: piece.boundary,
+            outline: piece.outline,
             seam_allowance_mm: piece.seam_allowance_mm,
             material: piece.material,
+            grain: piece.grain,
         }
     }
 }
@@ -209,13 +282,33 @@ impl PatternPiece {
     /// industry convention, freely overridable per piece.
     const DEFAULT_SEAM_ALLOWANCE_MM: f64 = 10.0;
 
-    pub fn new(name: impl Into<String>, boundary: PatternBoundary) -> Self {
+    /// Builds a piece from the path the designer drew.
+    pub fn new(name: impl Into<String>, outline: SeamPath) -> Self {
         Self {
+            id: PieceId::new(),
             name: name.into(),
-            boundary,
+            outline,
             seam_allowance_mm: Self::DEFAULT_SEAM_ALLOWANCE_MM,
             material: None,
+            grain: None,
         }
+    }
+
+    /// Builds a piece from a polygon, lifting it into an all-corner path.
+    ///
+    /// Every caller that used to hand over a [`PatternBoundary`] migrates in
+    /// one line, and the v1→v2 document migration uses this too. The lift is
+    /// bit-exact and does no float arithmetic — see
+    /// [`SeamPath::from_boundary`].
+    pub fn from_boundary(name: impl Into<String>, boundary: PatternBoundary) -> Self {
+        Self::new(name, SeamPath::from_boundary(&boundary))
+    }
+
+    /// This piece's identity. No setter: an id describes which piece this is,
+    /// and letting a caller assign one would let two pieces claim to be the
+    /// same piece.
+    pub fn id(&self) -> PieceId {
+        self.id
     }
 
     pub fn seam_allowance_mm(&self) -> f64 {
@@ -240,20 +333,68 @@ impl PatternPiece {
     /// The one place in the codebase a [`CutLine`] comes into existence. See
     /// that type for why the return is a newtype rather than a bare
     /// `PatternBoundary`.
-    pub fn cut_boundary(&self) -> Result<CutLine, PatternError> {
+    ///
+    /// Flattens through `flatten_for_offset`, not plain `flatten`: the
+    /// discretisation has to hold *after* the offset, and a boundary
+    /// flattened with no knowledge of the impending offset is precisely the
+    /// error that function exists to prevent.
+    ///
+    /// A curve that succeeds at 0.01mm and fails at 0.001mm with
+    /// `OffsetSelfIntersects` is **correct behaviour, not a regression**: a
+    /// chord next to a sharp corner has become shorter than the allowance,
+    /// and the loud failure is the right answer. Do not weaken the check.
+    ///
+    /// There is deliberately no cached boundary behind a `#[serde(skip)]`
+    /// field. That is an unmeasured optimisation, and the drag-loop benchmark
+    /// is what decides whether it is ever worth the second source of truth.
+    pub fn cut_boundary(&self, tolerance_mm: f64) -> Result<CutLine, PatternError> {
+        let flattened = self
+            .outline
+            .flatten_for_offset(tolerance_mm, self.seam_allowance_mm)?;
         Ok(CutLine {
             piece: self.name.clone(),
-            boundary: self.boundary.offset(self.seam_allowance_mm)?,
+            boundary: flattened.offset(self.seam_allowance_mm)?,
         })
     }
+
+    /// Which way this piece sits on the cloth, if it has been laid up.
+    pub fn grain(&self) -> Option<GrainLine> {
+        self.grain
+    }
+
+    /// Sets or clears the grain line. Unlike the seam allowance there is
+    /// nothing to re-validate here: a [`GrainLine`] cannot be constructed
+    /// invalid, so the only states this can reach are valid ones.
+    pub fn set_grain(&mut self, grain: Option<GrainLine>) {
+        self.grain = grain;
+    }
+}
+
+/// The flattening tolerance a new project starts with, in millimetres.
+///
+/// 0.01mm against ADR-003's 0.4mm industrial-cutter figure: forty times finer
+/// than any cutter can execute and far finer than cloth can hold. The last
+/// wave measured this exact tolerance at roughly 1% of a 120Hz frame for one
+/// piece's full drag path, so it is affordable on evidence rather than on
+/// assertion.
+///
+/// There is deliberately **no upper bound**. A tolerance of 1e9 turns every
+/// curve into a straight line, which is useless but not *wrong* in the
+/// correct-or-loud sense, and inventing a ceiling means inventing a number.
+/// Revisit if a real user ever sets one.
+pub const DEFAULT_FLATTEN_TOLERANCE_MM: f64 = 0.01;
+
+fn default_flatten_tolerance() -> f64 {
+    DEFAULT_FLATTEN_TOLERANCE_MM
 }
 
 /// A garment project: its pieces and the body measurements driving them.
 ///
-/// No invariant of its own to protect on the wire — each `PatternPiece`
-/// already validates itself on deserialization, so a plain derive here is
-/// enough; `Project` doesn't need to re-check what its elements guarantee.
-#[derive(Debug, Default, Clone, Serialize, Deserialize)]
+/// Each [`PatternPiece`] validates itself on deserialization, so the project
+/// does not re-check what its elements guarantee. It does own two things they
+/// cannot: whether their material references resolve, and the flattening
+/// tolerance every derived cut line in the document is computed at.
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(try_from = "ProjectData", into = "ProjectData")]
 pub struct Project {
     pub name: String,
@@ -264,18 +405,59 @@ pub struct Project {
     /// it, which is the whole point of the change away from embedded
     /// copies.
     pub materials: MaterialLibrary,
+    /// How finely authored curves are flattened before anything is cut.
+    ///
+    /// Private with a validated setter, and persisted: the tolerance is the
+    /// entire contract between an authored curve and the polygon a cutter
+    /// follows, so a document that did not carry it would produce a different
+    /// cut line on reload. That is precisely the silent difference C1 exists
+    /// to forbid.
+    flatten_tolerance_mm: f64,
 }
 
 /// The wire shape of a [`Project`]. Identical to the type — the validation
 /// is not about the fields, it is about whether the references between them
 /// resolve.
-#[derive(Debug, Default, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 struct ProjectData {
     name: String,
     pieces: Vec<PatternPiece>,
     measurements: Vec<Measurement>,
     #[serde(default)]
     materials: MaterialLibrary,
+    #[serde(default = "default_flatten_tolerance")]
+    flatten_tolerance_mm: f64,
+}
+
+/// Hand-written, because the derived one produces `0.0` — a tolerance
+/// `set_flatten_tolerance_mm` refuses. A derive here would mint an invalid
+/// project through a path that never runs the validator, which is a C1
+/// violation created by four characters nobody would think to look at.
+impl Default for Project {
+    fn default() -> Self {
+        Self {
+            name: String::new(),
+            pieces: Vec::new(),
+            measurements: Vec::new(),
+            materials: MaterialLibrary::default(),
+            flatten_tolerance_mm: DEFAULT_FLATTEN_TOLERANCE_MM,
+        }
+    }
+}
+
+/// Same trap, one level down: `ProjectData` is where `#[serde(default)]`
+/// reaches for a default during deserialization, so the derive would fire
+/// here without any obvious call site to notice it at.
+impl Default for ProjectData {
+    fn default() -> Self {
+        Self {
+            name: String::new(),
+            pieces: Vec::new(),
+            measurements: Vec::new(),
+            materials: MaterialLibrary::default(),
+            flatten_tolerance_mm: DEFAULT_FLATTEN_TOLERANCE_MM,
+        }
+    }
 }
 
 impl From<Project> for ProjectData {
@@ -285,6 +467,7 @@ impl From<Project> for ProjectData {
             pieces: project.pieces,
             measurements: project.measurements,
             materials: project.materials,
+            flatten_tolerance_mm: project.flatten_tolerance_mm,
         }
     }
 }
@@ -293,12 +476,16 @@ impl TryFrom<ProjectData> for Project {
     type Error = PatternError;
 
     fn try_from(data: ProjectData) -> Result<Self, Self::Error> {
-        let project = Project {
+        let mut project = Project {
             name: data.name,
             pieces: data.pieces,
             measurements: data.measurements,
             materials: data.materials,
+            flatten_tolerance_mm: DEFAULT_FLATTEN_TOLERANCE_MM,
         };
+        // Through the setter, not assigned: a file is exactly where an
+        // invalid tolerance arrives from.
+        project.set_flatten_tolerance_mm(data.flatten_tolerance_mm)?;
         project.check_material_references()?;
         Ok(project)
     }
@@ -311,7 +498,29 @@ impl Project {
             pieces: Vec::new(),
             measurements: Vec::new(),
             materials: MaterialLibrary::new(),
+            flatten_tolerance_mm: DEFAULT_FLATTEN_TOLERANCE_MM,
         }
+    }
+
+    /// How finely this project's curves are flattened before anything derived
+    /// from them is cut.
+    pub fn flatten_tolerance_mm(&self) -> f64 {
+        self.flatten_tolerance_mm
+    }
+
+    /// Sets the flattening tolerance, refusing values that cannot describe a
+    /// curve. Reuses the geometry crate's own error so one condition has one
+    /// name across both layers.
+    pub fn set_flatten_tolerance_mm(&mut self, value_mm: f64) -> Result<(), PatternError> {
+        if !value_mm.is_finite() || value_mm <= 0.0 {
+            return Err(PatternError::Geometry(
+                GeometryError::ToleranceNotPositive {
+                    tolerance_mm: value_mm,
+                },
+            ));
+        }
+        self.flatten_tolerance_mm = value_mm;
+        Ok(())
     }
 
     /// The material a piece will be cut from, resolved against this
@@ -352,6 +561,12 @@ impl Project {
         self.pieces.iter().find(|p| p.name == name)
     }
 
+    /// The lookup that makes [`PieceId`] worth storing. Without it the field
+    /// is bytes on disk; grading and export both index pieces by identity.
+    pub fn find_piece_by_id(&self, id: PieceId) -> Option<&PatternPiece> {
+        self.pieces.iter().find(|p| p.id == id)
+    }
+
     /// Sets a named measurement, overwriting any existing value of the same
     /// name.
     pub fn set_measurement(&mut self, name: impl Into<String>, value_mm: f64) {
@@ -369,8 +584,35 @@ impl Project {
             .map(|m| m.value_mm)
     }
 
-    pub fn total_perimeter_mm(&self) -> f64 {
-        self.pieces.iter().map(|p| p.boundary.perimeter()).sum()
+    /// [`PatternPiece::cut_boundary`] at this project's tolerance.
+    ///
+    /// Two functions rather than a piece-to-project back-reference: the piece
+    /// stays testable in isolation, and the project stays the ergonomic path.
+    /// Every caller outside this crate should reach for this one, because it
+    /// is the only route that cannot disagree with the document about how
+    /// finely to flatten.
+    pub fn cut_boundary(&self, piece: &PatternPiece) -> Result<CutLine, PatternError> {
+        piece.cut_boundary(self.flatten_tolerance_mm)
+    }
+
+    /// The summed perimeter of every piece, at this project's tolerance.
+    ///
+    /// Fallible since §3.6: a piece stores a path, and turning a path into
+    /// something with a perimeter is a flatten, which can fail. The old
+    /// infallible `-> f64` had nowhere to put that and would have had to
+    /// return a plausible number for a piece that has no perimeter at all.
+    ///
+    /// Plain `flatten`, not `flatten_for_offset`: nothing is being offset
+    /// here, so tightening would be wrong.
+    pub fn total_perimeter_mm(&self) -> Result<f64, PatternError> {
+        let mut total = 0.0;
+        for piece in &self.pieces {
+            total += piece
+                .outline
+                .flatten(self.flatten_tolerance_mm)?
+                .perimeter();
+        }
+        Ok(total)
     }
 }
 
@@ -444,7 +686,7 @@ impl Document {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use patal_geometry::Point2;
+    use patal_geometry::{EdgeSegment, Point2};
     use patal_materials::Material;
 
     fn square_boundary(side: f64) -> PatternBoundary {
@@ -457,12 +699,264 @@ mod tests {
         .expect("square is a valid boundary")
     }
 
+    fn square_path(side: f64) -> SeamPath {
+        SeamPath::from_boundary(&square_boundary(side))
+    }
+
+    #[test]
+    fn a_piece_keeps_the_curves_it_was_drawn_with() {
+        // S1 and S2. The whole wave in one assertion: what goes in comes back
+        // out as edges, not as a polygon someone has to re-guess.
+        let start = Point2::new(0.0, 0.0);
+        let outline = SeamPath::closed(
+            start,
+            vec![
+                EdgeSegment::Cubic {
+                    c1: Point2::new(15.0, -30.0),
+                    c2: Point2::new(50.0, -22.0),
+                    to: Point2::new(75.0, 10.0),
+                },
+                EdgeSegment::Line {
+                    to: Point2::new(75.0, 100.0),
+                },
+                EdgeSegment::Line { to: start },
+            ],
+        )
+        .expect("closes");
+
+        let piece = PatternPiece::new("Bodice Front", outline.clone());
+        let json = serde_json::to_string(&piece).expect("serializes");
+        let restored: PatternPiece = serde_json::from_str(&json).expect("round trips");
+
+        assert_eq!(restored.outline, outline);
+        assert_eq!(restored.outline.edges().len(), 3);
+        assert_eq!(
+            restored
+                .outline
+                .edges()
+                .iter()
+                .filter(|e| matches!(e.geometry(), EdgeSegment::Cubic { .. }))
+                .count(),
+            1
+        );
+    }
+
+    #[test]
+    fn no_polygon_appears_anywhere_in_a_serialized_piece() {
+        // S3. The derived boundary is derived, never persisted — otherwise a
+        // file can assert an outline that disagrees with its own curves.
+        let piece = PatternPiece::new("Front", square_path(200.0));
+        let json = serde_json::to_string(&piece).expect("serializes");
+        assert!(
+            !json.contains("boundary"),
+            "a polygon reached the wire: {json}"
+        );
+        assert!(json.contains("outline"));
+    }
+
+    #[test]
+    fn a_project_supplies_its_own_tolerance_to_the_cut_line() {
+        // S5. Two routes to the same answer, so the ergonomic one cannot
+        // drift from the testable one.
+        let mut project = Project::new("Blouse");
+        project.set_flatten_tolerance_mm(0.02).expect("valid");
+        let piece = PatternPiece::new("Front", square_path(200.0));
+
+        let via_project = project.cut_boundary(&piece).expect("cuts");
+        let via_piece = piece.cut_boundary(0.02).expect("cuts");
+        assert_eq!(via_project.points(), via_piece.points());
+    }
+
+    #[test]
+    fn the_cut_line_is_flattened_against_the_offset_it_is_about_to_receive() {
+        // The correctness upgrade this wave gets in passing. Plain flatten
+        // discretises with no knowledge of the impending offset, which is
+        // exactly the error flatten_for_offset exists to prevent. On a curved
+        // piece with a large allowance the two disagree; if they ever stop
+        // disagreeing, cut_boundary has quietly regressed to plain flatten.
+        let start = Point2::new(0.0, 0.0);
+        let outline = SeamPath::closed(
+            start,
+            vec![
+                EdgeSegment::Cubic {
+                    c1: Point2::new(10.0, 60.0),
+                    c2: Point2::new(90.0, 60.0),
+                    to: Point2::new(100.0, 0.0),
+                },
+                EdgeSegment::Line { to: start },
+            ],
+        )
+        .expect("closes");
+
+        let mut piece = PatternPiece::new("Curved", outline.clone());
+        piece.set_seam_allowance_mm(20.0).expect("valid");
+
+        // 0.1mm, not the 0.5mm the execution plan specified. Subdivision is
+        // adaptive and recursive, so the point count moves in jumps: at 0.5mm
+        // this curve's 1.41x tightening lands inside the same jump and both
+        // routes return 17 points, which made the plan's assertion pass for
+        // no reason and fail for the right one. Measured across allowance and
+        // tolerance before picking these — at 0.1mm the two genuinely part.
+        let tolerance = 0.1;
+        let tight = piece.cut_boundary(tolerance).expect("cuts");
+        let naive = outline
+            .flatten(tolerance)
+            .expect("flattens")
+            .offset(20.0)
+            .expect("offsets");
+
+        assert_ne!(
+            tight.points().len(),
+            naive.points().len(),
+            "cut_boundary must tighten for the offset, not flatten blind"
+        );
+
+        // And it must tighten by *this* rule, not merely by some rule. Without
+        // this, swapping flatten_for_offset for a hand-rolled fudge factor
+        // still passes the assertion above.
+        let expected = outline
+            .flatten_for_offset(tolerance, 20.0)
+            .expect("flattens")
+            .offset(20.0)
+            .expect("offsets");
+        assert_eq!(tight.points(), expected.points());
+    }
+
+    #[test]
+    fn a_total_perimeter_reports_failure_rather_than_a_plausible_number() {
+        // R2: the signature is fallible now because flattening is, and this
+        // asserts both halves of that.
+        //
+        // The success half first — a square's perimeter is still its
+        // perimeter once the piece stores a path rather than a polygon.
+        let mut project = Project::new("Blouse");
+        project.add_piece(PatternPiece::new("Front", square_path(100.0)));
+        let total = project.total_perimeter_mm().expect("flattens");
+        assert!((total - 400.0).abs() < 1e-9, "got {total}");
+
+        // The failure half, which is what the name promises. A path that runs
+        // out and straight back is closed, finite and perfectly constructible,
+        // but it flattens to two distinct points — fewer than a polygon needs.
+        // The old `-> f64` signature had nowhere to put that, so it would have
+        // had to return a number for a piece that has no perimeter.
+        let sliver = SeamPath::new(
+            Point2::new(0.0, 0.0),
+            vec![
+                EdgeSegment::Line {
+                    to: Point2::new(50.0, 0.0),
+                },
+                EdgeSegment::Line {
+                    to: Point2::new(0.0, 0.0),
+                },
+            ],
+        )
+        .expect("closes exactly");
+        project.add_piece(PatternPiece::new("Sliver", sliver));
+
+        let err = project
+            .total_perimeter_mm()
+            .expect_err("a degenerate piece has no perimeter to report");
+        assert!(
+            matches!(
+                err,
+                PatternError::Geometry(GeometryError::TooFewPoints { count: 2 })
+            ),
+            "expected the geometry failure to surface intact, got {err:?}"
+        );
+    }
+
+    #[test]
+    fn a_default_project_carries_a_usable_tolerance() {
+        // The trap this test exists for: a derived Default would produce 0.0,
+        // which set_flatten_tolerance_mm refuses — so Project::default()
+        // would mint a project the validator would have rejected, through a
+        // path that never runs it.
+        let project = Project::default();
+        assert_eq!(project.flatten_tolerance_mm(), DEFAULT_FLATTEN_TOLERANCE_MM);
+        assert!(project.flatten_tolerance_mm() > 0.0);
+    }
+
+    #[test]
+    fn a_project_deserialized_without_a_tolerance_key_still_gets_a_valid_one() {
+        // Fires through ProjectData's serde defaults, one level below the
+        // obvious call site.
+        let json = r#"{"name": "Blouse", "pieces": [], "measurements": []}"#;
+        let project: Project = serde_json::from_str(json).expect("loads");
+        assert_eq!(project.flatten_tolerance_mm(), DEFAULT_FLATTEN_TOLERANCE_MM);
+    }
+
+    #[test]
+    fn a_tolerance_that_cannot_describe_a_curve_is_refused() {
+        let mut project = Project::new("Blouse");
+        for bad in [0.0, -1.0, f64::NAN, f64::INFINITY] {
+            assert!(
+                project.set_flatten_tolerance_mm(bad).is_err(),
+                "{bad} accepted"
+            );
+        }
+        assert_eq!(project.flatten_tolerance_mm(), DEFAULT_FLATTEN_TOLERANCE_MM);
+    }
+
+    #[test]
+    fn a_tolerance_survives_the_file() {
+        let mut project = Project::new("Blouse");
+        project.set_flatten_tolerance_mm(0.05).expect("valid");
+        let json = serde_json::to_string(&project).expect("serializes");
+        let restored: Project = serde_json::from_str(&json).expect("loads");
+        assert_eq!(restored.flatten_tolerance_mm(), 0.05);
+    }
+
+    #[test]
+    fn two_pieces_never_share_an_id() {
+        let a = PatternPiece::new("Front", square_path(100.0));
+        let b = PatternPiece::new("Front", square_path(100.0));
+        assert_ne!(a.id(), b.id(), "same name, different identity");
+    }
+
+    #[test]
+    fn a_piece_is_findable_by_id_as_well_as_by_name() {
+        let mut project = Project::new("Blouse");
+        let piece = PatternPiece::new("Front", square_path(100.0));
+        let id = piece.id();
+        project.add_piece(piece);
+
+        assert_eq!(
+            project.find_piece_by_id(id).map(|p| p.name.as_str()),
+            Some("Front")
+        );
+        assert!(project.find_piece_by_id(PieceId::new()).is_none());
+    }
+
+    #[test]
+    fn an_id_survives_a_round_trip_and_is_a_plain_string_on_the_wire() {
+        // A plain string, not a nested object, so Swift's Foundation.UUID
+        // decodes it directly — the same treatment MaterialId got.
+        let piece = PatternPiece::new("Front", square_path(100.0));
+        let json = serde_json::to_value(&piece).expect("serializes");
+        assert!(
+            json["id"].is_string(),
+            "id must be a bare string, got {}",
+            json["id"]
+        );
+
+        let restored: PatternPiece = serde_json::from_value(json).expect("round trips");
+        assert_eq!(restored.id(), piece.id());
+    }
+
     #[test]
     fn piece_has_default_seam_allowance() {
-        let piece = PatternPiece::new("Front Bodice", square_boundary(200.0));
+        // Built through `from_boundary`, the one-line migration path every
+        // polygon caller takes — including the v1→v2 document migration.
+        let piece = PatternPiece::from_boundary("Front Bodice", square_boundary(200.0));
         assert_eq!(piece.seam_allowance_mm(), 10.0);
-        let cut = piece.cut_boundary().expect("cuts cleanly");
-        assert!(cut.perimeter() > piece.boundary.perimeter());
+        let cut = piece
+            .cut_boundary(DEFAULT_FLATTEN_TOLERANCE_MM)
+            .expect("cuts cleanly");
+        let sewing = piece
+            .outline
+            .flatten(DEFAULT_FLATTEN_TOLERANCE_MM)
+            .expect("flattens");
+        assert!(cut.perimeter() > sewing.perimeter());
     }
 
     #[test]
@@ -473,8 +967,10 @@ mod tests {
         // owns it. A `CutLine { .. }` literal in `patal-export` is a
         // compile error, which is the whole point of C11 living in the type
         // system rather than in a review checklist.
-        let piece = PatternPiece::new("Front Bodice", square_boundary(200.0));
-        let cut = piece.cut_boundary().expect("cuts cleanly");
+        let piece = PatternPiece::new("Front Bodice", square_path(200.0));
+        let cut = piece
+            .cut_boundary(DEFAULT_FLATTEN_TOLERANCE_MM)
+            .expect("cuts cleanly");
         assert_eq!(cut.piece_name(), "Front Bodice");
         assert_eq!(cut.points(), cut.boundary().points());
         assert_eq!(cut.perimeter(), cut.boundary().perimeter());
@@ -482,7 +978,7 @@ mod tests {
 
     #[test]
     fn negative_seam_allowance_is_rejected() {
-        let mut piece = PatternPiece::new("Front Bodice", square_boundary(200.0));
+        let mut piece = PatternPiece::new("Front Bodice", square_path(200.0));
         let err = piece.set_seam_allowance_mm(-1000.0).unwrap_err();
         assert_eq!(
             err,
@@ -494,7 +990,7 @@ mod tests {
 
     #[test]
     fn non_finite_seam_allowance_is_rejected() {
-        let mut piece = PatternPiece::new("Front Bodice", square_boundary(200.0));
+        let mut piece = PatternPiece::new("Front Bodice", square_path(200.0));
         assert!(piece.set_seam_allowance_mm(f64::NAN).is_err());
         assert!(piece.set_seam_allowance_mm(f64::INFINITY).is_err());
         assert_eq!(piece.seam_allowance_mm(), 10.0);
@@ -502,11 +998,18 @@ mod tests {
 
     #[test]
     fn valid_seam_allowance_is_accepted() {
-        let mut piece = PatternPiece::new("Front Bodice", square_boundary(200.0));
+        let mut piece = PatternPiece::new("Front Bodice", square_path(200.0));
         piece.set_seam_allowance_mm(15.0).expect("15mm is fine");
         assert_eq!(piece.seam_allowance_mm(), 15.0);
+        // Still an *exact* equality, deliberately. An all-corner path flattens
+        // bit-identically to the polygon it was lifted from, so routing the
+        // cut through a SeamPath must not move a single float. If this ever
+        // needs an epsilon, the lift has stopped being bit-exact.
         assert_eq!(
-            piece.cut_boundary().expect("cuts cleanly").perimeter(),
+            piece
+                .cut_boundary(DEFAULT_FLATTEN_TOLERANCE_MM)
+                .expect("cuts cleanly")
+                .perimeter(),
             square_boundary(200.0).offset(15.0).unwrap().perimeter()
         );
     }
@@ -516,7 +1019,7 @@ mod tests {
         let mut project = Project::new("Wrap Dress");
         let silk = project.materials.add(Material::new("Silk Charmeuse"));
 
-        let mut piece = PatternPiece::new("Skirt Panel", square_boundary(300.0));
+        let mut piece = PatternPiece::new("Skirt Panel", square_path(300.0));
         piece.material = Some(silk);
         project.add_piece(piece);
 
@@ -526,7 +1029,7 @@ mod tests {
             .expect("reference resolves")
             .expect("a material is assigned");
         assert_eq!(material.name, "Silk Charmeuse");
-        assert_eq!(project.total_perimeter_mm(), 1200.0);
+        assert_eq!(project.total_perimeter_mm().expect("flattens"), 1200.0);
     }
 
     #[test]
@@ -539,7 +1042,7 @@ mod tests {
         let mut project = Project::new("Wrap Dress");
         let silk = project.materials.add(Material::new("Silk Charmeuse"));
 
-        let mut piece = PatternPiece::new("Skirt Panel", square_boundary(300.0));
+        let mut piece = PatternPiece::new("Skirt Panel", square_path(300.0));
         piece.material = Some(silk);
         project.add_piece(piece);
 
@@ -562,7 +1065,7 @@ mod tests {
     fn removing_a_material_leaves_a_reference_that_reports_itself() {
         let mut project = Project::new("Wrap Dress");
         let silk = project.materials.add(Material::new("Silk Charmeuse"));
-        let mut piece = PatternPiece::new("Skirt Panel", square_boundary(300.0));
+        let mut piece = PatternPiece::new("Skirt Panel", square_path(300.0));
         piece.material = Some(silk);
         project.add_piece(piece);
 
@@ -589,7 +1092,7 @@ mod tests {
         let mut project = Project::new("Wrap Dress");
         let orphan = Material::new("Never Added").id();
 
-        let mut piece = PatternPiece::new("Skirt Panel", square_boundary(300.0));
+        let mut piece = PatternPiece::new("Skirt Panel", square_path(300.0));
         piece.material = Some(orphan);
         project.add_piece(piece);
 
@@ -605,7 +1108,7 @@ mod tests {
     #[test]
     fn a_piece_with_no_material_resolves_to_none_not_an_error() {
         let mut project = Project::new("Wrap Dress");
-        project.add_piece(PatternPiece::new("Skirt Panel", square_boundary(300.0)));
+        project.add_piece(PatternPiece::new("Skirt Panel", square_path(300.0)));
         let piece = project.find_piece("Skirt Panel").unwrap();
         assert!(project.material_for(piece).unwrap().is_none());
     }
@@ -614,7 +1117,7 @@ mod tests {
     fn a_project_with_a_dangling_reference_cannot_be_deserialized() {
         let mut project = Project::new("Wrap Dress");
         let silk = project.materials.add(Material::new("Silk Charmeuse"));
-        let mut piece = PatternPiece::new("Skirt Panel", square_boundary(300.0));
+        let mut piece = PatternPiece::new("Skirt Panel", square_path(300.0));
         piece.material = Some(silk);
         project.add_piece(piece);
 
@@ -676,7 +1179,7 @@ mod tests {
 
     #[test]
     fn pattern_piece_round_trips_through_json() {
-        let mut piece = PatternPiece::new("Front Bodice", square_boundary(200.0));
+        let mut piece = PatternPiece::new("Front Bodice", square_path(200.0));
         piece.set_seam_allowance_mm(12.5).unwrap();
         let silk = Material::new("Silk Charmeuse");
         piece.material = Some(silk.id());
@@ -685,7 +1188,7 @@ mod tests {
         let restored: PatternPiece = serde_json::from_str(&json).unwrap();
 
         assert_eq!(restored.name, piece.name);
-        assert_eq!(restored.boundary, piece.boundary);
+        assert_eq!(restored.outline, piece.outline);
         assert_eq!(restored.seam_allowance_mm(), 12.5);
         assert_eq!(restored.material, Some(silk.id()));
     }
@@ -696,11 +1199,17 @@ mod tests {
         // .patal file load a piece that would cut nine times too large,
         // silently. Loading one now fails instead.
         let json = r#"{
+            "id": "5f5c1a7e-0f3b-4c9e-9a2d-6b8f4c1e2d70",
             "name": "Front Bodice",
-            "boundary": [
-                {"x":0.0,"y":0.0},{"x":200.0,"y":0.0},
-                {"x":200.0,"y":300.0},{"x":0.0,"y":300.0}
-            ],
+            "outline": {
+                "start": {"x":0.0,"y":0.0},
+                "edges": [
+                    {"geometry":{"kind":"line","to":{"x":200.0,"y":0.0}}},
+                    {"geometry":{"kind":"line","to":{"x":200.0,"y":300.0}}},
+                    {"geometry":{"kind":"line","to":{"x":0.0,"y":300.0}}},
+                    {"geometry":{"kind":"line","to":{"x":0.0,"y":0.0}}}
+                ]
+            },
             "seam_allowance_mm": -1000.0,
             "material": null
         }"#;
@@ -712,7 +1221,7 @@ mod tests {
     fn project_round_trips_through_json_including_nested_validation() {
         let mut project = Project::new("Wrap Dress");
         let silk = project.materials.add(Material::new("Silk Charmeuse"));
-        let mut piece = PatternPiece::new("Skirt Panel", square_boundary(300.0));
+        let mut piece = PatternPiece::new("Skirt Panel", square_path(300.0));
         piece.set_seam_allowance_mm(15.0).unwrap();
         piece.material = Some(silk);
         project.add_piece(piece);

@@ -10,6 +10,7 @@ publish.workspace = true
 patal-geometry = { path = "../geometry" }
 patal-materials = { path = "../materials" }
 serde = { workspace = true }
+uuid = { workspace = true }
 
 [dev-dependencies]
 serde_json = { workspace = true }

@@ -7,13 +7,19 @@
 //! # The three rules this crate exists to keep
 //!
 //! **One implementation of the cut line.** Export never computes where cloth
-//! gets cut. It asks [`PatternPiece::cut_boundary`] and draws what comes
-//! back. That is not a convention here, it is a type: a [`CutLine`] has a
-//! private field and no public
+//! gets cut. It asks [`Project::cut_boundary`] and draws what comes back.
+//! That is not a convention here, it is a type: a [`CutLine`] has a private
+//! field and no public
 //! constructor, so this crate *cannot* fabricate one however convenient it
 //! would be. A second piece of code deciding where the scissors go is the
 //! defect that got the Swift offset kernel deleted, and it is worth spending
 //! a newtype to make it unrepresentable.
+//!
+//! Since §3.6 the same rule covers the *tolerance*. A piece stores the path
+//! the designer drew, so producing a cut line needs a flattening tolerance,
+//! and that number belongs to the document. [`export_tiled_pdf`] therefore
+//! takes a whole [`Project`] rather than loose pieces — see that function for
+//! why the smaller signature was the wrong one.
 //!
 //! **True scale, or nothing.** A millimetre in the model is a millimetre on
 //! the paper. There is no scale parameter and no fit-to-page. Every page
@@ -44,7 +50,7 @@
 //! ```
 //! use patal_export::{export_tiled_pdf, PageLayout};
 //! use patal_geometry::{PatternBoundary, Point2};
-//! use patal_pattern::PatternPiece;
+//! use patal_pattern::{PatternPiece, Project};
 //!
 //! let boundary = PatternBoundary::new(vec![
 //!     Point2::new(0.0, 0.0),
@@ -52,9 +58,10 @@
 //!     Point2::new(200.0, 300.0),
 //!     Point2::new(0.0, 300.0),
 //! ])?;
-//! let piece = PatternPiece::new("Front Bodice", boundary);
+//! let mut project = Project::new("Bodice Block");
+//! project.add_piece(PatternPiece::from_boundary("Front Bodice", boundary));
 //!
-//! let pdf = export_tiled_pdf(&[&piece], &PageLayout::a4())?;
+//! let pdf = export_tiled_pdf(&project, &PageLayout::a4())?;
 //! assert!(pdf.starts_with(b"%PDF-1.7"));
 //! # Ok::<(), Box<dyn std::error::Error>>(())
 //! ```
@@ -74,7 +81,7 @@ pub use layout::{
 pub use pdf::HAIRLINE_PT;
 pub use units::{Mm, Pt, MM_PER_PT, PT_PER_MM};
 
-use patal_pattern::{CutLine, PatternPiece};
+use patal_pattern::{CutLine, Project};
 
 use pdf::{Canvas, Page};
 
@@ -89,8 +96,8 @@ struct PiecePlan {
     /// sewer needs both and being unable to tell them apart is how a garment
     /// comes out a seam allowance too small all round.
     ///
-    /// Not a second cut line: this is the piece's own stored boundary, not a
-    /// re-derivation of the offset.
+    /// Not a second cut line: this is the piece's own outline flattened at
+    /// the document's tolerance, not a re-derivation of the offset.
     sewing: patal_geometry::PatternBoundary,
     grid: TileGrid,
 }
@@ -102,36 +109,64 @@ struct PiecePlan {
 /// lines, so aligning two sheets by their crosses is the same operation as
 /// assembling the piece correctly.
 ///
+/// # Why this takes a project rather than a list of pieces
+///
+/// Since §3.6 a piece stores the *path* the designer drew, so turning it into
+/// something a printer can draw needs a flattening tolerance — and that
+/// tolerance belongs to the document, not to whoever is calling export.
+///
+/// Taking `&[&PatternPiece]` plus a `tolerance_mm` parameter would have been
+/// a smaller change, and it is the one shape this function must not have: a
+/// caller passing 0.5 while the project says 0.01 gets a PDF that disagrees
+/// with the file it was exported from, silently, in the direction that
+/// matters. This crate can already only *read* a [`CutLine`] and never mint
+/// one; taking the whole project extends the same rule to the tolerance, so
+/// export cannot express a cut line the document disagrees with.
+///
+/// Exporting a subset of pieces is therefore not currently possible. That is
+/// deliberate — no caller wants it yet, and adding
+/// `export_tiled_pdf_pieces(project, pieces, layout)` later is additive.
+///
 /// # Errors
 ///
-/// Returns [`ExportError`] and no bytes at all if the pieces are empty, if a
-/// piece has no valid cut line, or if a piece needs more sheets than
+/// Returns [`ExportError`] and no bytes at all if the project has no pieces,
+/// if a piece has no valid cut line, if a piece's outline cannot be flattened
+/// at the project's tolerance, or if a piece needs more sheets than
 /// [`MAX_TILES_PER_PIECE`]. Page geometry is validated earlier, when the
 /// [`PageLayout`] is constructed.
-pub fn export_tiled_pdf(
-    pieces: &[&PatternPiece],
-    layout: &PageLayout,
-) -> Result<Vec<u8>, ExportError> {
-    if pieces.is_empty() {
+pub fn export_tiled_pdf(project: &Project, layout: &PageLayout) -> Result<Vec<u8>, ExportError> {
+    if project.pieces.is_empty() {
         return Err(ExportError::NothingToExport);
     }
 
     // Phase one: derive everything, emit nothing. If any piece fails, the
     // caller gets an error and no document — not a document missing a piece.
-    let mut plans: Vec<PiecePlan> = Vec::with_capacity(pieces.len());
-    for piece in pieces {
-        let cut = piece
-            .cut_boundary()
+    let mut plans: Vec<PiecePlan> = Vec::with_capacity(project.pieces.len());
+    for piece in &project.pieces {
+        // Through the project, never through the piece directly: this is the
+        // only route that cannot disagree with the document about tolerance.
+        let cut = project
+            .cut_boundary(piece)
             .map_err(|source| ExportError::CutLineFailed {
                 piece: piece.name.clone(),
                 source,
             })?;
 
+        // The sewing line is the piece's own outline at the project's
+        // tolerance — not a re-derivation of anything, and not a second
+        // opinion about the cut.
+        let sewing = piece
+            .outline
+            .flatten(project.flatten_tolerance_mm())
+            .map_err(|source| ExportError::CutLineFailed {
+                piece: piece.name.clone(),
+                source: source.into(),
+            })?;
+
         // The drawn extent is the union of both lines. Bounding only the cut
         // line would be wrong for a negative allowance, where the sewing line
         // is the outer of the two.
-        let bounds =
-            BoundsMm::of_boundary(cut.boundary()).union(BoundsMm::of_boundary(&piece.boundary));
+        let bounds = BoundsMm::of_boundary(cut.boundary()).union(BoundsMm::of_boundary(&sewing));
         let grid = TileGrid::cover(bounds, *layout);
 
         if grid.tiles() > MAX_TILES_PER_PIECE {
@@ -146,7 +181,7 @@ pub fn export_tiled_pdf(
             name: piece.name.clone(),
             seam_allowance_mm: piece.seam_allowance_mm(),
             cut,
-            sewing: piece.boundary.clone(),
+            sewing,
             grid,
         });
     }
@@ -484,9 +519,24 @@ fn trim(value: f64) -> String {
 mod tests {
     use super::*;
     use patal_geometry::{PatternBoundary, Point2};
+    use patal_pattern::PatternPiece;
+
+    /// Wraps loose pieces in a project at the default tolerance.
+    ///
+    /// Export takes the whole document since D6-A, because the flattening
+    /// tolerance belongs to the document rather than to whoever is calling
+    /// export. These tests build pieces individually, so this puts them in
+    /// the container export reads the tolerance from.
+    fn project_of(pieces: &[&PatternPiece]) -> Project {
+        let mut project = Project::new("Export Fixture");
+        for piece in pieces {
+            project.add_piece((*piece).clone());
+        }
+        project
+    }
 
     fn rect_piece(name: &str, w: f64, h: f64) -> PatternPiece {
-        PatternPiece::new(
+        PatternPiece::from_boundary(
             name,
             PatternBoundary::new(vec![
                 Point2::new(0.0, 0.0),
@@ -501,7 +551,7 @@ mod tests {
     #[test]
     fn exporting_nothing_is_an_error_not_an_empty_document() {
         assert_eq!(
-            export_tiled_pdf(&[], &PageLayout::a4()),
+            export_tiled_pdf(&project_of(&[]), &PageLayout::a4()),
             Err(ExportError::NothingToExport)
         );
     }
@@ -509,7 +559,7 @@ mod tests {
     #[test]
     fn a_small_piece_produces_a_calibration_page_and_one_sheet() {
         let piece = rect_piece("Front Bodice", 100.0, 150.0);
-        let pdf = export_tiled_pdf(&[&piece], &PageLayout::a4()).expect("exports");
+        let pdf = export_tiled_pdf(&project_of(&[&piece]), &PageLayout::a4()).expect("exports");
         let text = String::from_utf8_lossy(&pdf);
         assert!(text.contains("/Count 2"), "calibration page plus one sheet");
         assert!(text.contains("patal-calibration-page"));
@@ -531,7 +581,7 @@ mod tests {
     /// knowing when picking a value here, and is why this is a named fixture
     /// rather than an inline literal.
     fn notched_piece(name: &str) -> PatternPiece {
-        PatternPiece::new(
+        PatternPiece::from_boundary(
             name,
             PatternBoundary::new(vec![
                 Point2::new(0.0, 0.0),
@@ -554,7 +604,7 @@ mod tests {
         let mut bad = notched_piece("Back");
         bad.set_seam_allowance_mm(5.0).expect("finite and positive");
 
-        let err = export_tiled_pdf(&[&good, &bad], &PageLayout::a4()).unwrap_err();
+        let err = export_tiled_pdf(&project_of(&[&good, &bad]), &PageLayout::a4()).unwrap_err();
         match err {
             ExportError::CutLineFailed { piece, .. } => assert_eq!(piece, "Back"),
             other => panic!("expected the failure to name the piece, got {other:?}"),
@@ -566,7 +616,7 @@ mod tests {
         // 2000 x 3000 "mm" is what a piece authored in the wrong units looks
         // like. On A4 that is well past four hundred sheets.
         let piece = rect_piece("Oops", 20_000.0, 30_000.0);
-        let err = export_tiled_pdf(&[&piece], &PageLayout::a4()).unwrap_err();
+        let err = export_tiled_pdf(&project_of(&[&piece]), &PageLayout::a4()).unwrap_err();
         assert!(matches!(err, ExportError::TooManyTiles { .. }), "{err:?}");
         assert!(err.to_string().contains("check the piece's units"), "{err}");
     }
@@ -582,7 +632,7 @@ mod tests {
         // from the tile count, which is where the arithmetic used to give
         // out before the check that reads it ever ran.
         let piece = rect_piece("Corrupt", 1.0e12, 1.0e12);
-        let err = export_tiled_pdf(&[&piece], &PageLayout::a4()).unwrap_err();
+        let err = export_tiled_pdf(&project_of(&[&piece]), &PageLayout::a4()).unwrap_err();
         assert!(matches!(err, ExportError::TooManyTiles { .. }), "{err:?}");
         assert!(err.to_string().contains("check the piece's units"), "{err}");
     }
@@ -590,7 +640,7 @@ mod tests {
     #[test]
     fn every_sheet_carries_a_calibration_square() {
         let piece = rect_piece("Wide", 600.0, 500.0);
-        let pdf = export_tiled_pdf(&[&piece], &PageLayout::a4()).expect("exports");
+        let pdf = export_tiled_pdf(&project_of(&[&piece]), &PageLayout::a4()).expect("exports");
         let text = String::from_utf8_lossy(&pdf);
         let pages = text.matches("/Type /Page ").count();
         let squares = text.matches("50mm calibration square").count();
@@ -606,7 +656,7 @@ mod tests {
     fn several_pieces_each_get_their_own_grid() {
         let a = rect_piece("Front", 100.0, 100.0);
         let b = rect_piece("Back", 100.0, 100.0);
-        let pdf = export_tiled_pdf(&[&a, &b], &PageLayout::a4()).expect("exports");
+        let pdf = export_tiled_pdf(&project_of(&[&a, &b]), &PageLayout::a4()).expect("exports");
         let text = String::from_utf8_lossy(&pdf);
         assert!(text.contains("piece=\"Front\""));
         assert!(text.contains("piece=\"Back\""));
@@ -616,19 +666,22 @@ mod tests {
     #[test]
     fn the_same_pieces_always_export_to_the_same_bytes() {
         let piece = rect_piece("Front Bodice", 250.0, 400.0);
-        let once = export_tiled_pdf(&[&piece], &PageLayout::a4()).unwrap();
-        let twice = export_tiled_pdf(&[&piece], &PageLayout::a4()).unwrap();
+        let once = export_tiled_pdf(&project_of(&[&piece]), &PageLayout::a4()).unwrap();
+        let twice = export_tiled_pdf(&project_of(&[&piece]), &PageLayout::a4()).unwrap();
         assert_eq!(once, twice, "export must be a pure function of its input");
     }
 
     #[test]
     fn letter_and_a4_differ_in_the_media_box() {
         let piece = rect_piece("Front", 100.0, 100.0);
-        let a4 = String::from_utf8_lossy(&export_tiled_pdf(&[&piece], &PageLayout::a4()).unwrap())
-            .to_string();
-        let letter =
-            String::from_utf8_lossy(&export_tiled_pdf(&[&piece], &PageLayout::letter()).unwrap())
-                .to_string();
+        let a4 = String::from_utf8_lossy(
+            &export_tiled_pdf(&project_of(&[&piece]), &PageLayout::a4()).unwrap(),
+        )
+        .to_string();
+        let letter = String::from_utf8_lossy(
+            &export_tiled_pdf(&project_of(&[&piece]), &PageLayout::letter()).unwrap(),
+        )
+        .to_string();
         assert!(
             a4.contains("/MediaBox [0 0 595.2756 841.8898]"),
             "A4 in points"

@@ -27,8 +27,16 @@ this item replaces — see the "does not decide" note in
 and must respect `GrainLine` (added by the SeamPath blueprint §3.3), because a piece cannot be
 freely rotated on napped fabric.
 
-**Effort.** L (human) → M (CC). **Priority.** P2. **Depends on.** Grain line landing. The
-export-side dependency is met.
+**Effort.** L (human) → M (CC). **Priority.** P2. **Depends on.** ~~Grain line landing.~~
+**Both dependencies are now met** — `GrainLine` landed 2026-08-17 in the storage wave
+(`engine/crates/pattern/src/grain.rs`, with `PatternPiece::grain`/`set_grain`), and the
+export-side page transform has existed since 2026-08-14. Nothing blocks this but the
+packing algorithm itself.
+
+One thing changed under it: `export_tiled_pdf` now takes a `&Project` rather than
+`&[&PatternPiece]` (decision D6-A, 2026-08-17), so a lay plan works from the document and
+reads its flattening tolerance from there. That is the right input for nesting anyway —
+packing needs every piece and the grain of each.
 
 ---
 

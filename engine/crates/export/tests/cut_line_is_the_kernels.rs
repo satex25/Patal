@@ -19,13 +19,28 @@ mod common;
 use common::parse;
 use patal_export::{export_tiled_pdf, PageLayout, Pt};
 use patal_geometry::{PatternBoundary, Point2};
-use patal_pattern::PatternPiece;
+use patal_pattern::{PatternPiece, Project, DEFAULT_FLATTEN_TOLERANCE_MM};
 
 /// 1mm in PostScript points, from the two integers that define it.
 const PT_PER_MM_INDEPENDENT: f64 = 72.0 / 25.4;
 
+/// Wraps loose pieces in a project at the default tolerance.
+///
+/// Export takes the whole document since D6-A, because the flattening
+/// tolerance belongs to the document rather than to whoever is calling
+/// export. These tests still build pieces individually — that is what they
+/// are about — so this puts them in the container export reads the tolerance
+/// from, and nothing here ever sets a non-default one.
+fn project_of(pieces: &[&PatternPiece]) -> Project {
+    let mut project = Project::new("Export Fixture");
+    for piece in pieces {
+        project.add_piece((*piece).clone());
+    }
+    project
+}
+
 fn piece(name: &str, points: Vec<(f64, f64)>) -> PatternPiece {
-    PatternPiece::new(
+    PatternPiece::from_boundary(
         name,
         PatternBoundary::new(points.into_iter().map(|(x, y)| Point2::new(x, y)).collect())
             .expect("a valid boundary"),
@@ -39,9 +54,11 @@ fn rect(name: &str, w: f64, h: f64) -> PatternPiece {
 #[test]
 fn the_drawn_outline_is_the_kernels_cut_line_under_a_pure_translation() {
     let piece = rect("Front Bodice", 120.0, 160.0);
-    let expected = piece.cut_boundary().expect("cuts cleanly");
+    let expected = piece
+        .cut_boundary(DEFAULT_FLATTEN_TOLERANCE_MM)
+        .expect("cuts cleanly");
 
-    let pdf = export_tiled_pdf(&[&piece], &PageLayout::a4()).expect("exports");
+    let pdf = export_tiled_pdf(&project_of(&[&piece]), &PageLayout::a4()).expect("exports");
     let pages = parse(&pdf);
     assert_eq!(pages.len(), 2, "calibration page plus one sheet");
 
@@ -86,11 +103,13 @@ fn a_two_hundred_millimetre_edge_is_two_hundred_millimetres_on_the_page() {
     // matrix — none of which the round-trip test above can see, because that
     // one undoes the transform using the same constant it was applied with.
     let piece = rect("Ruler", 200.0, 100.0);
-    let cut = piece.cut_boundary().expect("cuts cleanly");
+    let cut = piece
+        .cut_boundary(DEFAULT_FLATTEN_TOLERANCE_MM)
+        .expect("cuts cleanly");
     // The cut line of a rectangle with a 10mm allowance is 220 x 120.
     let width_mm = 220.0;
 
-    let pdf = export_tiled_pdf(&[&piece], &PageLayout::a4()).expect("exports");
+    let pdf = export_tiled_pdf(&project_of(&[&piece]), &PageLayout::a4()).expect("exports");
     let pages = parse(&pdf);
     let drawn = pages[1].longest_polyline().expect("something was drawn");
 
@@ -113,7 +132,7 @@ fn a_two_hundred_millimetre_edge_is_two_hundred_millimetres_on_the_page() {
 fn the_calibration_square_is_exactly_fifty_millimetres() {
     // C12. The claim printed on the page has to be true of the page.
     let piece = rect("Front", 100.0, 100.0);
-    let pdf = export_tiled_pdf(&[&piece], &PageLayout::a4()).expect("exports");
+    let pdf = export_tiled_pdf(&project_of(&[&piece]), &PageLayout::a4()).expect("exports");
     let pages = parse(&pdf);
 
     let expected = 50.0 * PT_PER_MM_INDEPENDENT; // 141.7322835 pt
@@ -137,7 +156,7 @@ fn the_calibration_square_never_lands_on_a_cut_line() {
     // about to cut — and it is labelled "measure me", so they would.
     let piece = rect("Wide", 600.0, 700.0);
     let layout = PageLayout::a4();
-    let pdf = export_tiled_pdf(&[&piece], &layout).expect("exports");
+    let pdf = export_tiled_pdf(&project_of(&[&piece]), &layout).expect("exports");
     let pages = parse(&pdf);
 
     let strip_top = (layout.margin() + patal_export::Mm(patal_export::CALIBRATION_STRIP_MM))
@@ -189,11 +208,13 @@ fn a_piece_drafted_downward_from_the_origin_still_tiles_correctly() {
         "Bodice Front",
         vec![(0.0, 0.0), (150.0, 0.0), (150.0, -420.0), (0.0, -420.0)],
     );
-    let cut = piece.cut_boundary().expect("cuts cleanly");
+    let cut = piece
+        .cut_boundary(DEFAULT_FLATTEN_TOLERANCE_MM)
+        .expect("cuts cleanly");
     let min_x = cut.points().iter().map(|p| p.x).fold(f64::MAX, f64::min);
     let min_y = cut.points().iter().map(|p| p.y).fold(f64::MAX, f64::min);
 
-    let pdf = export_tiled_pdf(&[&piece], &PageLayout::a4()).expect("exports");
+    let pdf = export_tiled_pdf(&project_of(&[&piece]), &PageLayout::a4()).expect("exports");
     let pages = parse(&pdf);
 
     // Some sheet must start exactly at the piece's bottom-left corner,
@@ -231,7 +252,7 @@ fn the_sewing_line_and_the_cut_line_are_both_drawn_and_are_different() {
     // A sewer needs both, and needs to tell them apart. The cut line is the
     // outer one for a positive allowance.
     let piece = rect("Front", 100.0, 100.0);
-    let pdf = export_tiled_pdf(&[&piece], &PageLayout::a4()).expect("exports");
+    let pdf = export_tiled_pdf(&project_of(&[&piece]), &PageLayout::a4()).expect("exports");
     let pages = parse(&pdf);
 
     let closed: Vec<&Vec<(Pt, Pt)>> = pages[1].polylines.iter().filter(|p| p.len() == 4).collect();

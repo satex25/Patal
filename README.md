@@ -79,12 +79,16 @@ This is a foundation, not a product yet. What's real today, and what isn't:
   discipline: `seam_allowance_mm` is validated, not a bare public field.
   Curves live in a layer *above* the polygon kernel — `SeamPath` and
   `EdgeSegment` are authored, `flatten` discretizes them, and the kernel is
-  untouched ([ADR-003](docs/adr/ADR-003-curve-representation.md)). Materials
-  have stable identity and a project carries a document schema version
-  ([ADR-004](docs/adr/ADR-004-document-format.md)). 136 tests across the
-  workspace — unit tests, a property suite, and a closed-form curve oracle —
-  `cargo clippy --workspace --all-targets -- -D warnings` clean, `cargo deny`
-  clean on all four checks.
+  untouched ([ADR-003](docs/adr/ADR-003-curve-representation.md)). A piece
+  stores the path it was *drawn* with, not the polygon that path flattens to:
+  the polygon is derived on demand at the document's own tolerance and is
+  never persisted, so a saved file can be edited back into its curves and
+  cannot assert an outline that disagrees with them. Materials have stable
+  identity, so does each piece, and a project carries a document schema
+  version ([ADR-004](docs/adr/ADR-004-document-format.md)). 168 tests across
+  the workspace — unit tests, a property suite, and a closed-form curve
+  oracle — `cargo clippy --workspace --all-targets -- -D warnings` clean,
+  `cargo deny` clean on all four checks.
 - `patal-export`: tiled PDF at true scale. A millimetre in the model is a
   millimetre on the paper — there is no scale parameter and no fit-to-page,
   `Mm` and `Pt` are distinct types with exactly one conversion between them,
@@ -137,16 +141,24 @@ port's only caller was its own test suite. Seam-allowance geometry belongs
 to `patal-geometry` and will reach Swift through uniffi-generated bindings.
 
 Deleting it removed the second implementation; `CutLine` stops a third from
-appearing. It is minted only by `PatternPiece::cut_boundary()`, has a private
-field, and is what `patal-export` draws — so a crate that wants points to draw
-can read the kernel's answer and cannot compute its own. The rule moved out of
-the review checklist and into the compiler.
+appearing. It is minted only by `PatternPiece::cut_boundary(tolerance_mm)`,
+has a private field, and is what `patal-export` draws — so a crate that wants
+points to draw can read the kernel's answer and cannot compute its own. The
+rule moved out of the review checklist and into the compiler.
 
-The remaining Swift/Rust gap is the identity model, and it is unchanged:
-Swift's `PatternPiece` and `Project` carry a `UUID` that Rust's types have
-no counterpart for, so `PatternPiece`'s `Codable` conformance is
-Swift-to-Swift only — unlike `PatternBoundary`'s, which matches the Rust
-wire format exactly.
+The tolerance obeys the same rule. It belongs to the document, so
+`export_tiled_pdf` takes a whole `&Project` rather than loose pieces and a
+number: a caller passing a tolerance that disagrees with the file's would
+produce a PDF that disagrees with the file, silently, in the direction that
+matters.
+
+The remaining Swift/Rust gap is the identity model. Rust's `PatternPiece` now
+carries a `PieceId` — a UUID, `serde(transparent)`, so it is a bare string on
+the wire that `Foundation.UUID` decodes directly. Swift's mirror has not been
+updated to adopt it, so today both languages mint their own ids and
+`PatternPiece`'s `Codable` conformance is still Swift-to-Swift only, unlike
+`PatternBoundary`'s, which matches the Rust wire format exactly. Closing that
+is scheduled work, gated on a mirror-or-delete decision for `apps/native`.
 
 What's deliberately not started: the parametric propagation/constraint
 solver (patterns as "a living system" where edits propagate), **DXF-AAMA/ASTM

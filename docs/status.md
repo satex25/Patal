@@ -1,30 +1,60 @@
 ---
 title: Status
 tags: [status]
-updated: 2026-08-16
+updated: 2026-08-17
 ---
 
-# Status — 2026-08-16
+# Status — 2026-08-17
 
 Single source of truth for where the work is. Update at the end of each session;
 if this disagrees with any other note, this wins.
 
-## Right now — 2026-08-16
+## Right now — 2026-08-17
 
-**Tree.** `main` at `4abf281`. Local branch `tile-count-saturates` sits one commit ahead
-at `155894e` (tile-count overflow fix, unpushed, has never seen CI). `seampath-edge-container`
-is merged and still present locally. Working tree clean.
+**Tree.** `main` at `159a639`, with PRs #5 and #6 merged this session — six PRs merged
+total, every one green on all five CI jobs. No open PRs against `main`. The working branch
+is **`seampath-storage-wave`**, nine commits ahead, rebased onto the new `main` (which
+rewrote every hash — anything citing `1d5e5d5`…`c071f47` is pointing at unreachable
+commits). Working tree clean apart from an untracked `_to_delete/` left over from a git
+maintenance incident on 2026-08-16; it holds three zero-byte lock files, a stale bundle and
+two temp pack files, and nothing references it.
 
-**Verified this cycle**, from a clean checkout of `155894e` on Linux / Rust 1.97.1:
-`cargo fmt --check` clean · **136 tests pass** across the workspace — 135 unit and
-integration, plus one doc-test · `cargo clippy --workspace --all-targets -D warnings`
-clean. Nothing was found broken.
+**Verified this cycle**, locally on Windows via `scripts\cargo.bat`, at `c6ac313`:
+`fmt --check` clean · **168 tests pass** across the workspace — 167 unit and integration,
+plus one doc-test · `clippy --workspace --all-targets -D warnings` clean ·
+`RUSTDOCFLAGS="-D warnings" cargo doc` clean · the Tauri harness clean under `-D warnings` ·
+`cargo deny check` reports advisories, bans, licenses and sources all ok.
 
 The breakdown is spelled out because the two numbers are both defensible and the repo
-had them disagreeing: `cargo test` reports 136, of which the doc-test is one. Quote the
+had them disagreeing: `cargo test` reports 168, of which the doc-test is one. Quote the
 total and say what is in it, rather than picking whichever count a given sentence needs.
 
-**What landed.** [The incumbent persistence probe](analysis/incumbent-persistence-probe.md)
+**The storage wave is seven tasks in, of twelve.** `PatternPiece` now stores the `SeamPath`
+the designer drew rather than the polygon it flattens to — the gap the wave exists to
+close, where the Tauri harness flattened a path and handed the polygon to
+`PatternPiece::new`, losing the curves at that line with nothing downstream able to recover
+them. Along the way: an `Edge` container carrying per-edge joins, `Join::Smooth` validated
+against the coordinates that claim it, the bit-exact polygon→path lift, `GrainLine`,
+`PieceId`, and a persisted per-document flatten tolerance.
+
+**Two results worth keeping.** The lift property — `lift(b).flatten(t)` bit-identical to
+`b` at every tolerance from 1e-6 to 100 — passed first run with no epsilon and no shrunk
+counterexample. And the byte-compared golden PDF did **not** move when export was rewired
+through the lifted path, which the execution plan predicted it would: the losslessness
+holds end to end through the PDF writer, not merely in the geometry tests that assert it.
+
+**D6 answered: export is project-aware.** `export_tiled_pdf(project, layout)`, not
+`(pieces, layout, tolerance_mm)`. A caller passing a tolerance that disagrees with the
+document's is the two-sources-of-truth failure `CutLine` exists to prevent, and this is the
+only shape where export cannot express a cut line the document disagrees with. Subset
+export is gone until a real caller asks. **This decision is currently recorded only in the
+execution plan — ADR-007 must carry it, and that is Task 12.**
+
+**Where it stops.** At the ⛔ **v2 shape freeze**, the one-way door before Task 8. Nothing
+written so far has reached a file anyone holds, which is exactly why pausing here is cheap.
+See "The next decision" below.
+
+**What landed earlier.** [The incumbent persistence probe](analysis/incumbent-persistence-probe.md)
 — citation-grade evidence on the two rows that gate the v2 freeze, read from Seamly2D's
 versioned XSD and source (`d6e7562`) and Freesewing's core and plugin trees (`8a8de5a`,
 core v4.0.0). Two results:
@@ -55,6 +85,41 @@ discipline is that being wrong stays visible: the probe's first draft concluded 
 current schema alone that Seamly2D "never modelled material as data". An adversarial
 review pass against the sources reversed it. Reading the newest schema is not reading the
 format.
+
+## The next decision — the v2 shape freeze ⛔
+
+**This is the live gate. Task 8 must not start without an explicit sign-off**, because it
+is a one-way door: once the migration is written against a shape, changing the shape means
+changing the migration.
+
+The instrument for reviewing it is in the execution plan — a temporary `print_v2_shape`
+test that serialises a two-piece project with one cubic edge, one `Smooth` join, a grain
+line and a non-default tolerance, and prints it. It is a review instrument, not a
+regression; delete it once the shape is signed off.
+
+What signing off means, stated plainly:
+
+1. A piece stores `outline` (a `SeamPath`) and **never** a polygon.
+2. An edge is `{"geometry": {...}, "join": "..."}` — nested, not flat.
+3. `join` may be omitted and means `corner`; `geometry` may not be omitted.
+4. A piece carries `id` (bare UUID string), `grain` (nullable), `seam_allowance_mm`,
+   `material`.
+5. A project carries `flatten_tolerance_mm`, defaulting to 0.01.
+6. **Deliberately absent:** per-edge seam allowance (P-03), fold edges (P-05), notch
+   anchors (P-13). The `Edge` container is what makes each of those a field on an existing
+   struct rather than a schema v3 — that is the entire argument for blueprint revision 6,
+   and this is the moment it either holds or does not.
+
+**What the freeze does not decide, and must not be read as deciding:** whether a dart is an
+object. That is Decision 2 of the census, it is still blocked on K3 — hand-drafting a block
+in Seamly2D and Freesewing, which is GUI work rather than code — and freezing v2 does not
+settle it. If a dart turns out to be an object rather than a derived operation, it is an
+*additive* piece-level field, not a change to any shape above. **Confirm that reading before
+signing**, because it is the load-bearing assumption that makes signing safe while K3 is
+outstanding.
+
+Two further gates sit behind this one: **Swift mirror-or-delete** before Task 10 (blueprint
+§6 recommends mirror), and ADR-007 plus the doc close-out at Task 12.
 
 ## Documentation consolidated — 2026-08-13
 
@@ -172,17 +237,18 @@ bodice block produces it as a side effect.
 
 ## Next, in the order I would do it
 
-1. **Decide what a piece stores.** A `PatternPiece` holds a flattened
-   `PatternBoundary`, not its authored `SeamPath` — so a saved file cannot be edited
-   back into curves. This is the most likely reason for schema version 2 and should be
-   settled before any file leaves this machine. The
-   [primitive census](analysis/pattern-primitives.md) narrows what the freeze has to get
-   right to three decisions; the rest is additive and must not hold the door.
-   **Decision 1 taken 2026-08-15** (the edge container). **Decision 3 now has evidence**
-   and is a drafting question rather than a research one — see
-   [the persistence probe](analysis/incumbent-persistence-probe.md). **Decision 2 is the
-   one thing still genuinely blocked on K3**, and it is therefore the critical path to
-   the freeze.
+1. ~~**Decide what a piece stores.**~~ **Done in code, 2026-08-17.** A `PatternPiece` now
+   holds its authored `SeamPath`, and the polygon is derived at the document's tolerance
+   rather than stored. What remains is the **v2 shape freeze** — see "The next decision"
+   above, which is the live gate.
+   The [primitive census](analysis/pattern-primitives.md) narrows what the freeze has to
+   get right to three decisions; the rest is additive and must not hold the door.
+   **Decision 1 taken 2026-08-15** (the edge container) and now shipped. **Decision 3 has
+   evidence** and is a drafting question rather than a research one — see
+   [the persistence probe](analysis/incumbent-persistence-probe.md). **Decision 2 — is a
+   dart an object — is the one thing still genuinely blocked on K3**, and it is therefore
+   the critical path. It does not block signing the freeze, because a dart arrives as an
+   additive field either way; it does block ADR-006.
 2. **Look at Seamly2D and Freesewing properly**, then write ADR-006. There is no
    competitive analysis anywhere in this project, and on the axis Pātāl currently
    competes on it is behind a free thirteen-year-old incumbent. The

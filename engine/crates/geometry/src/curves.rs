@@ -64,6 +64,25 @@ const MAX_TOLERANCE_TIGHTENING: f64 = 1.0e4;
 /// noise that trigonometry leaves behind.
 const CLOSURE_SNAP_RELATIVE: f64 = 1.0e-12;
 
+/// How far from parallel two tangents may sit and still be called smooth.
+///
+/// Compared against the *sine* of the angle between them, which is the cross
+/// product divided by both magnitudes — so this is scale-free and means the
+/// same thing on a 10mm buttonhole and a 2000mm bolt of cloth, exactly as
+/// `CLOSURE_SNAP_RELATIVE` does for distance.
+///
+/// At 1e-9 radians, a 100mm handle deviates by 1e-7mm: ten thousand times
+/// finer than a micron, far below any coordinate a designer expresses, and
+/// several orders above the ~1e-13 relative noise a cross product of
+/// millimetre-scale coordinates leaves behind. A designer's tool that draws a
+/// smooth join computes collinear handles exactly; this threshold exists for
+/// the float noise on the way to and from a file, not for hand-typed
+/// coordinates.
+///
+/// If it ever proves too tight, widen it and pin the new value in a named test
+/// with the reasoning. Never drop the check to make a case pass.
+pub const SMOOTH_JOIN_RELATIVE: f64 = 1.0e-9;
+
 /// One authored edge, starting wherever the previous one ended.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
@@ -97,12 +116,82 @@ impl EdgeSegment {
     }
 }
 
+/// How an edge meets the edge before it.
+///
+/// A *claim about intent*, which is why it is stored rather than re-derived:
+/// two collinear handles might be coincidence, and a designer who wants
+/// tangency preserved through an edit needs somewhere to say so.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Join {
+    /// No continuity claim. The *absence* of a claim, which is why it is the
+    /// serde default: omitting the key cannot manufacture a claim the
+    /// coordinates contradict.
+    #[default]
+    Corner,
+    /// The tangents on either side of this join are parallel and same-signed.
+    Smooth,
+}
+
+/// One authored edge: its geometry, and how it meets the edge before it.
+///
+/// # Why a struct around one field
+///
+/// `join` is the *first* per-edge attribute, not the only one. The primitive
+/// census identifies three more that are attributes of an edge — per-edge
+/// seam allowance (P-03), fold edges (P-05) and notch anchors (P-13) — and
+/// per-edge allowance is a fold-in rather than a maybe, because a neckline is
+/// finished at 6mm and a hem is turned at 40mm.
+///
+/// Each of those arriving as its own array parallel to the geometry adds a
+/// `len ==` invariant and one more thing every edit that splits a segment
+/// must keep in step. Four arrays is four chances to get it wrong, and the
+/// fourth gets it wrong on the path that feeds the cut line. This struct is
+/// what makes adding the second attribute a field rather than a schema
+/// migration.
+///
+/// Do not flatten it back.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct Edge {
+    geometry: EdgeSegment,
+    #[serde(default)]
+    join: Join,
+}
+
+impl Edge {
+    pub fn new(geometry: EdgeSegment, join: Join) -> Self {
+        Self { geometry, join }
+    }
+
+    /// An edge making no continuity claim — what every edge built through
+    /// [`SeamPath::new`] or [`SeamPath::closed`] is.
+    pub fn corner(geometry: EdgeSegment) -> Self {
+        Self {
+            geometry,
+            join: Join::Corner,
+        }
+    }
+
+    pub fn geometry(&self) -> EdgeSegment {
+        self.geometry
+    }
+
+    pub fn join(&self) -> Join {
+        self.join
+    }
+
+    /// Where this edge ends. Delegates to the geometry.
+    pub fn end(&self) -> Point2 {
+        self.geometry.end()
+    }
+}
+
 /// The wire shape of a [`SeamPath`]: exactly its fields, so a document is
 /// readable without knowing anything about this type's invariants.
 #[derive(Serialize, Deserialize)]
 struct SeamPathData {
     start: Point2,
-    segments: Vec<EdgeSegment>,
+    edges: Vec<Edge>,
 }
 
 /// A closed, authored outline: where it starts, and the edges that walk it
@@ -111,22 +200,22 @@ struct SeamPathData {
 /// # Invariants
 ///
 /// Construction is the only way in, exactly as with [`PatternBoundary`]:
-/// every control point is finite, there is at least one segment, and the
-/// last segment ends precisely where the path started. `serde` routes
-/// through [`SeamPath::new`] via `try_from`, so a hand-edited file cannot
+/// every control point is finite, there is at least one edge, and the last
+/// edge ends precisely where the path started. `serde` routes through
+/// [`SeamPath::with_joins`] via `try_from`, so a hand-edited file cannot
 /// smuggle in an open or non-finite path.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(try_from = "SeamPathData", into = "SeamPathData")]
 pub struct SeamPath {
     start: Point2,
-    segments: Vec<EdgeSegment>,
+    edges: Vec<Edge>,
 }
 
 impl From<SeamPath> for SeamPathData {
     fn from(path: SeamPath) -> Self {
         Self {
             start: path.start,
-            segments: path.segments,
+            edges: path.edges,
         }
     }
 }
@@ -135,7 +224,7 @@ impl TryFrom<SeamPathData> for SeamPath {
     type Error = GeometryError;
 
     fn try_from(data: SeamPathData) -> Result<Self, Self::Error> {
-        Self::new(data.start, data.segments)
+        Self::with_joins(data.start, data.edges)
     }
 }
 
@@ -148,25 +237,81 @@ impl SeamPath {
     /// geometry — see [`SeamPath::closed`] for the case where you want that
     /// edge and want to say so.
     pub fn new(start: Point2, segments: Vec<EdgeSegment>) -> Result<Self, GeometryError> {
+        Self::with_joins(start, segments.into_iter().map(Edge::corner).collect())
+    }
+
+    /// [`SeamPath::new`] for a path that makes continuity claims.
+    ///
+    /// `edges[i].join` describes the join *entering* `edges[i]`, so
+    /// `edges[0].join` is the closure join at `start`. There is no parallel
+    /// array to keep in step, so there is no off-by-one to get wrong.
+    pub fn with_joins(start: Point2, edges: Vec<Edge>) -> Result<Self, GeometryError> {
         if !start.is_finite() {
             return Err(GeometryError::NonFiniteControlPoint { segment: 0 });
         }
-        if segments.is_empty() {
+        if edges.is_empty() {
             return Err(GeometryError::TooFewPoints { count: 1 });
         }
 
-        for (index, segment) in segments.iter().enumerate() {
-            if segment.control_points().any(|p| !p.is_finite()) {
+        for (index, edge) in edges.iter().enumerate() {
+            if edge.geometry().control_points().any(|p| !p.is_finite()) {
                 return Err(GeometryError::NonFiniteControlPoint { segment: index });
             }
         }
 
-        let end = segments.last().expect("checked non-empty").end();
+        let end = edges.last().expect("checked non-empty").end();
         if end != start {
             return Err(GeometryError::PathNotClosed { start, end });
         }
 
-        Ok(Self { start, segments })
+        // Where each edge begins. Edge 0 begins at `start`; every other edge
+        // begins where its predecessor ended.
+        let mut origins: Vec<Point2> = Vec::with_capacity(edges.len());
+        let mut cursor = start;
+        for edge in &edges {
+            origins.push(cursor);
+            cursor = edge.end();
+        }
+
+        let count = edges.len();
+        for index in 0..count {
+            if edges[index].join() != Join::Smooth {
+                continue;
+            }
+
+            // `edges[i].join` describes the join *entering* edge i, so
+            // edges[0]'s join is the closure join and its predecessor is the
+            // last edge.
+            let previous = (index + count - 1) % count;
+            let incoming = end_tangent(edges[previous].geometry(), origins[previous]);
+            let outgoing = start_tangent(edges[index].geometry(), origins[index]);
+
+            let (Some((ix, iy)), Some((ox, oy))) = (incoming, outgoing) else {
+                return Err(GeometryError::SmoothJoinUndefinedTangent { join: index });
+            };
+
+            let cross = ix * oy - iy * ox;
+            let dot = ix * ox + iy * oy;
+            let sine = cross.abs() / (ix.hypot(iy) * ox.hypot(oy));
+
+            // `reversed` means a cusp — parallel but pointing opposite ways —
+            // so it is `dot < 0`, not `dot <= 0`. A perpendicular join has
+            // `dot == 0` and is not a reversal; it is refused anyway, by the
+            // sine test, because perpendicular tangents have sine 1. That
+            // makes the two branches disjoint rather than overlapping, and it
+            // is why the strict comparison loses nothing: `dot == 0` with two
+            // non-zero tangents implies `sine == 1`, which always exceeds the
+            // threshold.
+            if sine > SMOOTH_JOIN_RELATIVE || dot < 0.0 {
+                return Err(GeometryError::SmoothJoinNotTangent {
+                    join: index,
+                    sine,
+                    reversed: dot < 0.0,
+                });
+            }
+        }
+
+        Ok(Self { start, edges })
     }
 
     /// [`SeamPath::new`], but makes the path close instead of refusing.
@@ -219,12 +364,55 @@ impl SeamPath {
         Self::new(start, segments)
     }
 
+    /// Lifts a polygon into an authored path of straight edges.
+    ///
+    /// # Why this does not invent geometry
+    ///
+    /// Appending the closing edge back to `start` looks like exactly what C9
+    /// forbids, and it is worth being explicit about why it is not. A
+    /// [`PatternBoundary`] is *defined* as a closed polygon — the edge from
+    /// its last point back to its first already exists, and
+    /// [`PatternBoundary::perimeter`] has always counted it. This makes that
+    /// edge explicit; it does not create one.
+    ///
+    /// That is different in kind from [`SeamPath::closed`], which spans a gap
+    /// the designer actually left, and which is why *that* function requires
+    /// the caller to opt in and this one does not.
+    ///
+    /// # Why this is infallible
+    ///
+    /// A valid `PatternBoundary` already guarantees at least three finite,
+    /// deduplicated points, which is strictly more than [`SeamPath::new`]
+    /// demands. There is no failure to report, and a `Result` here would be a
+    /// lie about what can go wrong.
+    ///
+    /// No float arithmetic happens anywhere in this function. That is what
+    /// makes the round-trip property in `tests/properties.rs` bit-exact
+    /// rather than approximate.
+    pub fn from_boundary(boundary: &PatternBoundary) -> Self {
+        let points = boundary.points();
+        let start = points[0];
+        let edges = points[1..]
+            .iter()
+            .copied()
+            .chain(std::iter::once(start))
+            .map(|to| Edge::corner(EdgeSegment::Line { to }))
+            .collect();
+
+        Self { start, edges }
+    }
+
     pub fn start(&self) -> Point2 {
         self.start
     }
 
-    pub fn segments(&self) -> &[EdgeSegment] {
-        &self.segments
+    /// The edges that walk this path back to its start.
+    ///
+    /// Named `edges`, not `segments`, because it no longer returns segments.
+    /// A name that does not describe what it returns is worse than the churn
+    /// of renaming it.
+    pub fn edges(&self) -> &[Edge] {
+        &self.edges
     }
 
     /// Approximates the path as a polygon whose deviation from the true
@@ -242,15 +430,15 @@ impl SeamPath {
         let mut points = vec![self.start];
         let mut cursor = self.start;
 
-        for segment in &self.segments {
-            match segment {
-                EdgeSegment::Line { to } => points.push(*to),
+        for edge in &self.edges {
+            match edge.geometry() {
+                EdgeSegment::Line { to } => points.push(to),
                 EdgeSegment::Cubic { c1, c2, to } => {
-                    flatten_cubic(cursor, *c1, *c2, *to, tolerance_mm, 0, &mut points);
-                    points.push(*to);
+                    flatten_cubic(cursor, c1, c2, to, tolerance_mm, 0, &mut points);
+                    points.push(to);
                 }
             }
-            cursor = segment.end();
+            cursor = edge.end();
         }
 
         // The path closes, so the final point repeats the first.
@@ -315,16 +503,16 @@ impl SeamPath {
         let mut cursor = self.start;
         let mut max = 0.0f64;
 
-        for segment in &self.segments {
-            if let EdgeSegment::Cubic { c1, c2, to } = segment {
+        for edge in &self.edges {
+            if let EdgeSegment::Cubic { c1, c2, to } = edge.geometry() {
                 for i in 0..=CURVATURE_SAMPLES {
                     let t = i as f64 / CURVATURE_SAMPLES as f64;
-                    if let Some(k) = cubic_curvature(cursor, *c1, *c2, *to, t) {
+                    if let Some(k) = cubic_curvature(cursor, c1, c2, to, t) {
                         max = max.max(k);
                     }
                 }
             }
-            cursor = segment.end();
+            cursor = edge.end();
         }
 
         max
@@ -399,4 +587,30 @@ fn cubic_curvature(p0: Point2, p1: Point2, p2: Point2, p3: Point2, t: f64) -> Op
 
     let curvature = (dx * ddy - dy * ddx).abs() / denominator;
     curvature.is_finite().then_some(curvature)
+}
+
+/// The direction a segment leaves `from` in, or `None` where that direction
+/// is undefined.
+fn start_tangent(segment: EdgeSegment, from: Point2) -> Option<(f64, f64)> {
+    let head = match segment {
+        EdgeSegment::Line { to } => to,
+        EdgeSegment::Cubic { c1, .. } => c1,
+    };
+    non_degenerate(head.x - from.x, head.y - from.y)
+}
+
+/// The direction a segment arrives at its end in, or `None` where that
+/// direction is undefined.
+fn end_tangent(segment: EdgeSegment, from: Point2) -> Option<(f64, f64)> {
+    let (tail, head) = match segment {
+        EdgeSegment::Line { to } => (from, to),
+        EdgeSegment::Cubic { c2, to, .. } => (c2, to),
+    };
+    non_degenerate(head.x - tail.x, head.y - tail.y)
+}
+
+/// A tangent vector, unless it has collapsed to a point.
+fn non_degenerate(dx: f64, dy: f64) -> Option<(f64, f64)> {
+    let length = dx.hypot(dy);
+    (length > 0.0 && length.is_finite()).then_some((dx, dy))
 }
