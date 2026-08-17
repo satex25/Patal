@@ -19,12 +19,19 @@ decisions and their reasoning, and the four places executing the plan proved it 
 
 ## Right now — 2026-08-17
 
-**Tree.** `main` at `59fbe17`. PRs #5 through #9 all merged this session — **nine PRs merged
-total, every one green on all five CI jobs, no open PRs, and `main` is once again the only
-branch, local and remote.** `seampath-storage-wave`, `seampath-edge-container` and
-`docs-remaining-work-checklist` were all deleted after merging; their commits live on in
-`main`. Note the wave was rebased before merging, so anything citing `1d5e5d5`…`c071f47`
-points at unreachable commits.
+**Tree.** **PRs #1 through #10 are merged — ten total, every one green on all five CI jobs,
+no open PRs, and `main` is the only branch, local and remote.** `seampath-storage-wave`,
+`seampath-edge-container`, `docs-remaining-work-checklist` and `docs-post-merge-tree-facts`
+were all deleted after merging; their commits live on in `main`. Note the storage wave was
+rebased before merging, so anything citing `1d5e5d5`…`c071f47` points at unreachable
+commits.
+
+*This paragraph deliberately no longer names the tip commit.* It said `159a639`, then
+`78ab201`, then `59fbe17`, and each was wrong within the hour — because the hash that
+publishes a page cannot be known by the page being published, so a stated tip invalidates
+itself on the merge that ships it. Three corrections chased that before the cause was
+named. The merged-PR range is the equivalent fact and it is knowable in advance, so it
+stays true. Run `git log --oneline -1` for the tip; do not write it down here.
 
 ⚠️ **Both `pre-graft-*` tags exist only on this machine.** `git ls-remote --tags origin`
 returns nothing: they were never pushed, and the rule against pushing them means they never
