@@ -13,6 +13,10 @@ if this disagrees with any other note, this wins.
 one place, chunked and ordered by what unblocks what. A living page, ticked as work lands.
 Start there.
 
+**How the tree got here:**
+[session summary — 2026-08-17](plans/2026-08-17-session-summary.md) — what shipped, the
+decisions and their reasoning, and the four places executing the plan proved it wrong.
+
 ## Right now — 2026-08-17
 
 **Tree.** `main` at `78ab201`. PRs #5, #6, #7 and #8 all merged this session — **eight PRs
