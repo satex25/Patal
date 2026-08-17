@@ -19,20 +19,19 @@ decisions and their reasoning, and the four places executing the plan proved it 
 
 ## Right now — 2026-08-17
 
-**Tree.** `main` at `78ab201`. PRs #5, #6, #7 and #8 all merged this session — **eight PRs
-merged total, every one green on all five CI jobs.** `seampath-storage-wave` and
-`seampath-edge-container` were deleted after merging; their commits live on in `main`. Note
-the wave was rebased before merging, so anything citing `1d5e5d5`…`c071f47` points at
-unreachable commits.
+**Tree.** `main` at `59fbe17`. PRs #5 through #9 all merged this session — **nine PRs merged
+total, every one green on all five CI jobs, no open PRs, and `main` is once again the only
+branch, local and remote.** `seampath-storage-wave`, `seampath-edge-container` and
+`docs-remaining-work-checklist` were all deleted after merging; their commits live on in
+`main`. Note the wave was rebased before merging, so anything citing `1d5e5d5`…`c071f47`
+points at unreachable commits.
 
-**In flight.** `docs-remaining-work-checklist` is the one branch besides `main`, local and
-remote: this session's documentation work — the checklist, the session summary and the
-canvas cockpit. Documentation only; it touches no Rust, so the verified numbers below are
-unaffected by it.
-
-Both `pre-graft-*` tags are intact and must stay that way — they are the only pointers into
-the disjoint pre-graft history, and deleting them is the one irreversible operation in
-routine cleanup.
+⚠️ **Both `pre-graft-*` tags exist only on this machine.** `git ls-remote --tags origin`
+returns nothing: they were never pushed, and the rule against pushing them means they never
+will be. They are the sole pointers to `0a3ab75` and `fd147ba`, both unreachable from
+`main`, so the disjoint pre-graft history survives in exactly one place — this clone. Losing
+the working copy loses that history outright. Deleting the tags is the one irreversible
+operation in routine cleanup; treat cloning elsewhere as no backup at all.
 
 Working tree clean apart from three untracked entries: `_to_delete/`, debris from a git
 maintenance incident on 2026-08-16 that is verified safe to remove and kept deliberately

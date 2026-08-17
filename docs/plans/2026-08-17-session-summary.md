@@ -159,8 +159,10 @@ after `bce78a7` was deliberately kept local** until the outage cleared.
 | Held back by the outage | `e8dcba1` the living checklist · `5695a8d` this summary · `6b3ba24` the canvas cockpit |
 | Untracked | `_to_delete/` (verified safe, kept deliberately) · `docs/scratchpad.md` (never tracked) · `obsidian-canvas-cockpit.skill` (tooling, not part of the tree) |
 
-The outage cleared the same day and the branch was pushed in full — no force-push, nothing
-to clean up. The 168-test count was re-verified against the tree before pushing.
+The outage cleared the same day. The branch was pushed in full — no force-push, nothing to
+clean up — and landed as **PR #9** (`59fbe17`), green on all five CI jobs, taking the
+session to nine PRs merged. It was deleted on merge, local and remote, so `main` is once
+again the only branch. The 168-test count was re-verified against the tree before pushing.
 
 Verified locally at close: **168 tests**, `fmt`, `clippy -D warnings`, `rustdoc -D warnings`,
 the Tauri harness under `-D warnings`, and `cargo deny` all clean. C12 holds — Task 7 touched
