@@ -27,6 +27,7 @@ in this documentation:
 | [setup/](setup/) | Toolchain installation, reference repositories, and [printing at true scale](setup/printing.md) — the last of which is an operator runbook, not a developer note |
 | [analysis/](analysis/) | Audits of the codebase as found, and of the domain it models — including [the pattern primitive census](analysis/pattern-primitives.md) and [the incumbent persistence probe](analysis/incumbent-persistence-probe.md) that supplies its evidence |
 | [plans/](plans/) | Dated session plans and execution blueprints |
+| `COCKPIT.canvas` | The same tree as a navigable map, with `status.md` and `remaining-work.md` embedded live. **Obsidian only** — it is JSON on GitHub |
 
 ## Why the decisions are in here
 
@@ -49,6 +50,12 @@ Open `docs/` itself as the vault. Its `.obsidian/` workspace config is committed
 but git-ignored, so layout and graph settings stay local to your machine while the notes
 stay versioned. Links are plain relative Markdown rather than `[[wikilinks]]` so they
 resolve on GitHub as well as in Obsidian.
+
+**Session start:** open `COCKPIT.canvas` for the same tree as a map rather than a list.
+It embeds `status.md` and `remaining-work.md` live, so it shows current state rather than
+a copy that drifts, and flags the two items waiting on an operator decision. Everything
+else on it is a link-card. This file remains the entry point for anyone reading the tree
+on GitHub, where a canvas is only JSON.
 
 ## What Pātāl is not
 
