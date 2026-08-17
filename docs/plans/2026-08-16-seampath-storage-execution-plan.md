@@ -77,20 +77,31 @@ onward the projections are correct again, because Task 3 landed three properties
 than two — see that task. Every count from Task 3 to Task 6 was hit exactly: 147, 154, 157,
 161.
 
-**Execution status (2026-08-16).** Tasks 1–6 are complete and committed on
-`seampath-storage-wave`, all five gates green at each one:
+**Execution status (2026-08-17).** Tasks 1–7 are complete and committed on
+`seampath-storage-wave`, all six gates green at each one:
 
 | Task | Commit | Tests after |
 |---|---|---|
-| 1 — `Edge` container | `1d5e5d5` | 138 |
-| 2 — `Smooth` validated | `714322c` | 144 |
-| 3 — the lift | `422bcde` | 147 |
-| 4 — `GrainLine` | `f9405c7` | 154 |
-| 5 — `PieceId` | `065d860` | 157 |
-| 6 — flatten tolerance | `c071f47` | 161 |
+| 1 — `Edge` container | `16188a4` | 138 |
+| 2 — `Smooth` validated | `a60ee9f` | 144 |
+| 3 — the lift | `0d517ba` | 147 |
+| 4 — `GrainLine` | `0a9ed0f` | 154 |
+| 5 — `PieceId` | `9ec6a20` | 157 |
+| 6 — flatten tolerance | `c45d22e` | 161 |
+| 7 — the piece stores a path | `c6ac313` | **168** |
 
-The wave now sits at the ⛔ **D6** gate below. Task 7 is the first task that cannot start
-without an operator answer.
+**The hashes above are not the ones this plan carried yesterday.** The branch was rebased
+onto `main` on 2026-08-17 after PRs #5 and #6 merged, so every commit was rewritten. The
+old hashes (`1d5e5d5` … `c071f47`) are unreachable; these are the live ones.
+
+**Baseline moved, and the projections after it move with it.** Merging PR #5
+(`tile-count-saturates`) brought its 2 tests onto `main`, so the wave's baseline went 161 →
+163 without any wave work. Task 7's projected 166 is therefore **168**, and it was hit
+exactly. Every later projection in this plan is understated by the same 2 — read Task 8's
+"expect N" as N + 2, and re-derive from the live count rather than from the plan.
+
+The wave now sits at the ⛔ **v2 shape freeze** gate, below Task 7. That is the next thing
+needing an operator answer, and it is the one-way door.
 
 ---
 
@@ -189,13 +200,21 @@ migration as a pure function — without depending on key order. Task 9 spells i
 
 Three, not two. The blueprint frames two; R1 forces a third.
 
-- **⛔ D6 — export's public signature.** Before Task 7. See that task for the recommendation.
-- **⛔ §3.7 — the v2 shape freeze.** Before Task 9. One-way door: once the migration is
-  written against a shape, changing the shape means changing the migration.
-- **⛔ §3.9 — Swift: mirror or delete.** Before Task 11. Blueprint §6 recommends mirror.
+- **✅ D6 — export's public signature. ANSWERED 2026-08-17: option A**, project-aware.
+  Shipped in Task 7.
+- **⛔ §3.7 — the v2 shape freeze.** Before Task 8. One-way door: once the migration is
+  written against a shape, changing the shape means changing the migration. **This is the
+  live gate as of 2026-08-17.**
+- **⛔ §3.9 — Swift: mirror or delete.** Before Task 10. Blueprint §6 recommends mirror.
 
 Tasks 1–6 are additive or internal and none of them depends on these answers. Work can start
 immediately and stop cleanly at Task 7.
+
+*Corrected 2026-08-17.* The two gate references above said "before Task 9" and "before
+Task 11". Both were off by one against this plan's own headings — the freeze gate sits
+immediately before **Task 8**, and the Swift gate immediately before **Task 10**. Fixed
+here because an operator reading only this section would have believed a task's worth of
+slack existed that does not.
 
 ---
 
@@ -1668,7 +1687,22 @@ git commit -m "Persist the tolerance, and hand-write the Default it breaks"
 
 ---
 
-### ⛔ Decision D6 — export's public signature (answer before Task 7)
+### ✅ Decision D6 — export's public signature — **ANSWERED 2026-08-17: option A**
+
+**The operator chose A, project-aware.** `export_tiled_pdf(project: &Project, layout:
+&PageLayout)` shipped in Task 7 (`c6ac313`). B and C are recorded below as rejected, and
+**ADR-007 must carry this decision and both rejections when Task 12 writes it** — it is the
+only decision in this wave that changes a public signature in a crate outside
+`patal-pattern`, and a plan file is not where a decision like that should end its life.
+
+What the answer cost in practice, for the record: 23 call sites across `export`'s own tests
+and three integration test files, one `project_of` helper per test file, and the module
+doc-test. No production caller outside the harness existed to migrate. Subset export is
+gone until someone asks for it.
+
+The original decision text follows unchanged.
+
+---
 
 Forced by **R1**, and not in the blueprint. `export_tiled_pdf(pieces: &[&PatternPiece],
 layout: &PageLayout)` calls `piece.cut_boundary()` with no tolerance. After §3.6 that call
@@ -1695,6 +1729,34 @@ can recover them.
 
 **This task cannot be split.** Renaming the field breaks `patal-export` and the harness in
 the same instant, so the repair lands in the same commit or the workspace does not compile.
+
+> **Findings from executing this task (2026-08-17).** Three things this plan got wrong, and
+> one prediction that was wrong in the good direction. Recorded here rather than silently
+> fixed, because a plan that is only ever right is a plan nobody checked.
+>
+> 1. **The golden PDF did not change.** Step 5 says "**The golden PDF will change**" and
+>    gives the bless command. It did not, and it should not have been expected to: Task 3's
+>    property already guarantees `lift(b).flatten(t)` is bit-identical to `b`, and the piece
+>    list did not reorder. The byte comparison passing untouched is a *stronger* result than
+>    the plan anticipated — it extends the lift's losslessness from the geometry tests all
+>    the way through the PDF writer. **Do not bless the golden for this task.**
+> 2. **Step 1's offset-tightening test could not fail for the right reason.** It compared
+>    `cut_boundary(0.5)` against a plain `flatten(0.5).offset(20.0)` by point count. At
+>    0.5mm this curve's amplification is ~1.41, which lands inside the same
+>    adaptive-subdivision jump: both routes return 17 points and the `assert_ne!` fails on
+>    a correct implementation. Measured across allowance × tolerance before changing it; at
+>    **0.1mm** they genuinely part, 45 against 33. The shipped test also asserts equality
+>    against `flatten_for_offset` itself, so a hand-rolled fudge factor cannot pass it.
+> 3. **Step 1's `a_total_perimeter_reports_failure_…` never observed a failure.** It
+>    asserted a square's perimeter is 400 and stopped. The shipped version keeps that and
+>    adds the case the name promises: a path running out and straight back is closed,
+>    finite and constructible, and flattens to two distinct points — `TooFewPoints`, which
+>    is exactly what the old infallible `-> f64` had nowhere to put.
+> 4. **Step 6 says `cut_preview` routes through `Project::cut_boundary`.** It was left
+>    alone. `cut_preview` calls `flatten_for_offset` on the path directly and never builds
+>    a `PatternPiece`, so it did not break, and Step 6's own stated scope is "the minimum to
+>    compile". Rerouting it changes what the benchmark measures and belongs with the
+>    harness proof in Task 9.
 
 **Files:**
 - Modify: `engine/crates/pattern/src/lib.rs` (the piece, `cut_boundary`, `total_perimeter_mm`)
@@ -1992,10 +2054,13 @@ compiled doc-test. Update `rect_piece` and `notched_piece` (`:488`, `:533`) to r
 built with `PatternPiece::from_boundary`, and add a helper that wraps pieces in a `Project`
 at the default tolerance for the export tests to call.
 
-**The golden PDF will change** — the sewing line is now flattened from a lifted path rather
-than taken directly, and although Task 3's property guarantees those are bit-identical
-point-for-point, the calibration page's piece list may reorder. Re-bless only after
-confirming the diff is what you expect:
+~~**The golden PDF will change**~~ — **it did not. Do not bless it.** The reasoning below
+was that the sewing line is now flattened from a lifted path rather than taken directly and
+the calibration page's piece list may reorder. Task 3's property makes the first half
+bit-identical and the second never happened, so the golden passed untouched on 2026-08-17.
+Kept here because the command is still the right one if a *later* task legitimately moves
+the bytes — and because a golden that changes during this task means something is wrong,
+not that it needs re-blessing:
 
 ```bash
 PATAL_BLESS_GOLDEN=1 cmd //c 'C:\Users\User\patal\scripts\cargo.bat test --package patal-export'
@@ -2017,7 +2082,8 @@ cmd //c 'C:\Users\User\patal\scripts\cargo.bat test --workspace --locked'
 PATAL_CARGO_DIR=C:\Users\User\patal\apps\desktop\src-tauri cmd //c 'C:\Users\User\patal\scripts\cargo.bat clippy --all-targets --locked -- -D warnings'
 ```
 
-Expected: PASS, **166 tests**. Every one of the 18 original `patal-pattern` tests must still
+Expected: PASS, ~~166~~ **168 tests** (the baseline moved +2 when PR #5 merged; see the
+execution status header). Every one of the 18 original `patal-pattern` tests must still
 be present — updated only where the *type* changed, never where the behaviour should have
 held. If a test's assertion had to be relaxed to pass, stop: that is a regression wearing a
 test change as a disguise.
