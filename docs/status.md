@@ -20,18 +20,25 @@ decisions and their reasoning, and the four places executing the plan proved it 
 ## Right now — 2026-08-17
 
 **Tree.** `main` at `78ab201`. PRs #5, #6, #7 and #8 all merged this session — **eight PRs
-merged total, every one green on all five CI jobs, no open PRs, and `main` is the only
-branch** local and remote. `seampath-storage-wave` and `seampath-edge-container` were
-deleted after merging; their commits live on in `main`. Note the wave was rebased before
-merging, so anything citing `1d5e5d5`…`c071f47` points at unreachable commits.
+merged total, every one green on all five CI jobs.** `seampath-storage-wave` and
+`seampath-edge-container` were deleted after merging; their commits live on in `main`. Note
+the wave was rebased before merging, so anything citing `1d5e5d5`…`c071f47` points at
+unreachable commits.
+
+**In flight.** `docs-remaining-work-checklist` is the one branch besides `main`, local and
+remote: this session's documentation work — the checklist, the session summary and the
+canvas cockpit. Documentation only; it touches no Rust, so the verified numbers below are
+unaffected by it.
 
 Both `pre-graft-*` tags are intact and must stay that way — they are the only pointers into
 the disjoint pre-graft history, and deleting them is the one irreversible operation in
 routine cleanup.
 
-Working tree clean apart from two untracked entries: `_to_delete/`, debris from a git
+Working tree clean apart from three untracked entries: `_to_delete/`, debris from a git
 maintenance incident on 2026-08-16 that is verified safe to remove and kept deliberately
-(see the checklist), and `docs/scratchpad.md`, which has never been tracked.
+(see the checklist); `docs/scratchpad.md`, which has never been tracked; and
+`obsidian-canvas-cockpit.skill`, a tooling bundle that landed in the repo root and is not
+part of the project — it should be moved out or ignored, never committed.
 
 **Verified this cycle**, locally on Windows via `scripts\cargo.bat`, at `c6ac313`:
 `fmt --check` clean · **168 tests pass** across the workspace — 167 unit and integration,

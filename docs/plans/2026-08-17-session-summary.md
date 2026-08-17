@@ -26,7 +26,8 @@ The plan this executed: [2026-08-16-seampath-storage-execution-plan.md](2026-08-
 | #7 | **Tasks 1–7 of the storage wave** | 163 → 168 |
 | #8 | README rewritten as a Garment CAD document | docs only |
 
-`main` is now the only branch, local and remote. Both `pre-graft-*` tags verified intact.
+At that point `main` was the only branch, local and remote. Both `pre-graft-*` tags verified
+intact.
 
 ### The gap that closed
 
@@ -147,18 +148,19 @@ layout anyone chose.
 
 ## State at close
 
-**Nothing is pushed.** GitHub began returning 503s on both GraphQL and REST late in the
-session, and work was deliberately kept local from that point.
+GitHub began returning 503s on both GraphQL and REST late in the session, so **everything
+after `bce78a7` was deliberately kept local** until the outage cleared.
 
 | | |
 |---|---|
 | `origin/main` | `78ab201` — untouched since PR #8 |
-| Local branch | `docs-remaining-work-checklist`, **1 commit ahead, unpushed** (`e8dcba1`) |
-| Pushed pre-outage | `bce78a7` — on a branch, no PR, harmless |
-| Untracked | `_to_delete/` (verified safe, kept deliberately), `docs/scratchpad.md` (never tracked) |
+| Working branch | `docs-remaining-work-checklist` — documentation only, touching no Rust |
+| Pushed pre-outage | `bce78a7`, the branch's first commit |
+| Held back by the outage | `e8dcba1` the living checklist · `5695a8d` this summary · `6b3ba24` the canvas cockpit |
+| Untracked | `_to_delete/` (verified safe, kept deliberately) · `docs/scratchpad.md` (never tracked) · `obsidian-canvas-cockpit.skill` (tooling, not part of the tree) |
 
-When GitHub recovers the branch already holds both commits, so opening the PR shows the
-final state — no force-push, nothing to clean up.
+The outage cleared the same day and the branch was pushed in full — no force-push, nothing
+to clean up. The 168-test count was re-verified against the tree before pushing.
 
 Verified locally at close: **168 tests**, `fmt`, `clippy -D warnings`, `rustdoc -D warnings`,
 the Tauri harness under `-D warnings`, and `cargo deny` all clean. C12 holds — Task 7 touched
