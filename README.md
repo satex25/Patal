@@ -1,227 +1,285 @@
+<div align="center">
+
 # Pātāl
 
-CADS PATAL
+**Garment CAD.** A precision pattern-making system for garment engineering —
+from the first drafted line to production-ready, cuttable output.
 
-    Computer Aided Design System For Patterns
+[![CI](https://github.com/satex25/Patal/actions/workflows/ci.yml/badge.svg)](https://github.com/satex25/Patal/actions/workflows/ci.yml)
+[![Rust 1.97.1](https://img.shields.io/badge/rust-1.97.1-000000?logo=rust&logoColor=white)](rust-toolchain.toml)
+[![Swift 5.9](https://img.shields.io/badge/swift-5.9-F05138?logo=swift&logoColor=white)](apps/native/Package.swift)
+[![Tests 168](https://img.shields.io/badge/tests-168%20passing-2ea043)](#verification)
+[![License Proprietary](https://img.shields.io/badge/license-proprietary-8957e5)](LICENSE)
 
-Pātāl (पाताल) — in Hindu cosmology, the netherworld: one of the seven realms
-beneath the earth, vast and richly structured, built downward from a surface
-few ever see. Formerly named *Patruin* (Irish "patrún," pattern); renamed
-2026-08-07 — see [ADR-002](docs/adr/ADR-002-naming-convention.md).
+[Documentation](docs/) · [Current status](docs/status.md) · [Decision records](docs/adr/) · [Roadmap](docs/roadmap.md) · [satex25.co](https://satex25.co)
 
-A professional garment pattern creation platform: from idea to production-ready pattern in
-one workspace, across iPhone, iPad, Mac, and Windows.
+</div>
 
-- Repo: [github.com/satex25/patal](https://github.com/satex25/patal)
-- Website / downloads: [satex25.co](https://satex25.co)
+---
 
-The full founding memorandum is in [`docs/memorandum.md`](docs/memorandum.md).
-Everything below is the technical shape it maps to.
+## What this is
+
+**GCAD — Garment CAD.** The discipline is closer to mechanical CAD than to
+illustration: a pattern is a dimensioned, tolerance-bearing engineering
+drawing that gets manufactured in a physical material. A seam allowance is an
+offset with a mitre limit. A sleeve cap is a cubic Bézier. A graded size run
+is a parametric transform. Getting any of them wrong is not a rendering
+artifact — it is cloth cut to the wrong shape.
+
+Pātāl is one platform-agnostic Rust engine driving native front ends across
+iPhone, iPad, Mac, and Windows. The engine holds the geometry, the material
+model, and the document format. The front ends hold nothing that decides a
+dimension.
+
+> **Pātāl** (पाताल) — in Hindu cosmology, the netherworld: one of seven realms
+> beneath the earth, vast and richly structured, built downward from a surface
+> few ever see. Naming conventions are fixed in
+> [ADR-002](docs/adr/ADR-002-naming-convention.md): `Pātāl` in prose, `Patal`
+> for toolchains and identifiers.
+
+---
+
+## The rule everything else answers to
+
+From the header of `engine/crates/geometry/src/lib.rs`, and it outranks every
+other convention in this repository:
+
+> **Every operation here is either correct or loud.** A pattern piece that is
+> silently wrong is worse than one that refuses to compute: the first gets cut
+> out of cloth, the second gets fixed.
+
+There is no fallback path that returns a plausible number. Non-finite
+coordinates, a zero-length edge, an inset deeper than the piece can give, a
+seam allowance that exceeds a curve's radius — each returns a typed error
+naming the failure and, where it is knowable, *where* it happened. A failed
+offset reports which two edges cross, so an interface can point at the defect
+instead of merely announcing one.
+
+---
+
+## Guarantees enforced by the type system
+
+These are the load-bearing invariants. Each is a compile-time or
+construction-time property, not a convention a reviewer has to remember — the
+distinction matters, because conventions decay and types do not.
+
+| Guarantee | How it is enforced | Why it exists |
+|---|---|---|
+| **One implementation of the cut path** | `CutLine` has a private field and no public constructor. It is minted only by `PatternPiece::cut_boundary`. | Two pieces of code deciding where cloth gets cut is a defect that surfaces in fabric. A second opinion is unrepresentable, not merely discouraged. |
+| **A piece stores the curve it was drawn with** | `PatternPiece.outline` is a `SeamPath`. The polygon is derived on demand and never persisted. | A file that stores the flattened polygon cannot be edited back into its curves. Storing both would let a document assert an outline that disagrees with its own geometry. |
+| **The document owns its tolerance** | `flatten_tolerance_mm` is a validated private field on `Project`; `export_tiled_pdf` takes a `&Project`, not loose pieces plus a number. | A caller passing a tolerance that disagrees with the file's produces output that disagrees with the file — silently, in the direction that matters. |
+| **True scale, or nothing** | `Mm` and `Pt` are distinct types with exactly one conversion. No scale parameter, no fit-to-page. | A millimetre in the model is a millimetre on the paper, or the pattern is wrong. |
+| **Invariants hold for a value's whole life** | Construction is the only way in. `PatternBoundary`, `SeamPath`, `GrainLine`, `PieceId` and `Material` all validate on the way in — including from disk, via `serde(try_from)`. | A hand-edited or corrupted file must not be able to smuggle in a state the constructor would have refused. |
+| **Curves layer above the kernel, never inside it** | `SeamPath`/`EdgeSegment` sit on top of the polygon kernel; the kernel is untouched. ([ADR-003](docs/adr/ADR-003-curve-representation.md)) | The kernel is the most-tested code in the project. Curves earn their place above it rather than destabilising it. |
+| **Identity is not a name** | `PieceId` and `MaterialId` are UUID newtypes, `serde(transparent)`, with no `Default`. | Two pieces can legitimately both be called "Front". Grading and export index by identity. |
+
+---
+
+## Capabilities
+
+Status is deliberately confined to this one table so the rest of this document
+stays true as the work lands. **●** shipped · **◐** partial · **○** planned.
+
+| | Capability | Notes |
+|:-:|---|---|
+| ● | **Curve-native pattern geometry** | `SeamPath` of `Edge`s, each carrying its own join. Cubic Béziers, adaptive flattening, closed-form-verified curvature. |
+| ● | **Seam allowance & cut line** | Outward/inward offset, mitre limit, self-intersection detection with the crossing edge indices reported. |
+| ● | **Offset-aware flattening** | `flatten_for_offset` tightens discretisation so the tolerance still holds *after* the offset, not just before it. |
+| ● | **Document format** | Schema-versioned, material references validated on load, every type round-trips. |
+| ● | **Piece identity & grain line** | `PieceId`, and a directional `GrainLine` — the prerequisite for any lay plan on napped or directional cloth. |
+| ● | **Tiled true-scale PDF export** | Dependency-free writer, registration crosses, 50 mm calibration square on every sheet. **Not yet printed** — see [Verification](#verification). |
+| ◐ | **Schema v2 & migration** | Documents are at schema v1. The v2 shape is specified and awaiting sign-off; a version-tolerant loader and a lossless v1→v2 migration are the next increment. |
+| ◐ | **Rust ↔ Swift bridge** | `patal-ffi` exposes fallible operations across uniffi as `Result`. Tested from the Rust side; no bindings generated, no XCFramework, no caller yet. |
+| ○ | **Grading (size runs)** | Pure Rust, testable headlessly. A pattern tool that cannot grade is a drawing tool. |
+| ○ | **DXF-AAMA/ASTM export** | The factory-facing format. Needs a reference capture before it can start ([ADR-008](docs/adr/ADR-008-export-format-decisions.md) leaves the ruling open on purpose). |
+| ○ | **Parametric constraint solver** | Patterns as a living system where an edit propagates. A project in its own right, not a feature. |
+| ○ | **Multi-piece nesting / lay plan** | 2D bin packing constrained by grain. Both dependencies are now met. |
+| ○ | **Pattern primitives** | Darts, notches, pleats, facings. The `Edge` container exists so each arrives as a field rather than a schema migration. |
+| ○ | **Metal canvas** | Per [ADR-001](docs/adr/ADR-001-stack-selection.md). Not `wgpu` — a portable abstraction caps the ceiling for the primary target. |
+| ○ | **Sync · Intelligence** | Deliberately last. An AI collaborator needs something worth acting on first. |
+
+The authoritative, dated view is [`docs/status.md`](docs/status.md). If it and
+this table ever disagree, that file wins.
+
+---
 
 ## Architecture
 
-One Rust engine, two front ends:
+One engine. Two front ends. Nothing above the engine decides a dimension.
+
+```mermaid
+flowchart TB
+    subgraph FE["Design environment"]
+        direction LR
+        NA["<b>apps/native</b> · SwiftUI<br/>iPhone · iPad · Mac"]
+        DE["<b>apps/desktop</b> · Tauri<br/>engineering harness"]
+    end
+
+    FFI["<b>patal-ffi</b><br/>uniffi bridge"]
+
+    subgraph EN["engine/ — platform-agnostic Rust core"]
+        direction TB
+        PA["<b>patal-pattern</b><br/>PatternPiece · Project · Document<br/>mints the only CutLine"]
+        GE["<b>patal-geometry</b><br/>SeamPath · PatternBoundary<br/>offset · flatten"]
+        MA["<b>patal-materials</b><br/>Material · MaterialLibrary"]
+        EX["<b>patal-export</b><br/>tiled true-scale PDF"]
+    end
+
+    OUT(["Printed pattern<br/>verified with a steel rule"])
+
+    NA -.->|built, not yet wired| FFI
+    FFI --> PA
+    DE -->|links the crates directly| PA
+    PA --> GE
+    PA --> MA
+    PA -->|the whole document| EX
+    EX --> OUT
+
+    classDef core stroke:#2f81f7,stroke-width:2px
+    classDef shell stroke:#8957e5,stroke-width:2px
+    classDef out stroke:#2ea043,stroke-width:2px
+    class PA,GE,MA,EX core
+    class NA,DE,FFI shell
+    class OUT out
+```
+
+`apps/desktop` links the engine crates directly — both are Rust. `apps/native`
+will reach them through uniffi-generated bindings packaged as an XCFramework,
+once a macOS toolchain is available to build one. The dashed edge is the seam
+that is built and tested but not yet wired.
 
 ```
 patal/
-├── engine/                 Rust workspace — platform-agnostic core
+├── engine/                    Rust workspace — the platform-agnostic core
 │   └── crates/
-│       ├── geometry/       patal-geometry  — Point2, PatternBoundary, offset, SeamPath curves
-│       ├── materials/      patal-materials — Material, MaterialLibrary
-│       ├── pattern/        patal-pattern   — PatternPiece, Project, measurements, CutLine
-│       ├── export/         patal-export    — tiled, true-scale PDF (no dependencies)
-│       └── ffi/            patal-ffi       — uniffi bindings exposed to Swift
+│       ├── geometry/          patal-geometry   the polygon kernel + authored curves
+│       ├── materials/         patal-materials  material model with stable identity
+│       ├── pattern/           patal-pattern    pieces, projects, documents, cut lines
+│       ├── export/            patal-export     tiled true-scale PDF, zero dependencies
+│       └── ffi/               patal-ffi        uniffi bindings exposed to Swift
 ├── apps/
-│   ├── native/              SwiftUI — iPhone, iPad, Mac (one shared codebase)
-│   └── desktop/              Tauri — engineering harness, NOT a shipping target (ADR-005)
-├── docs/                    all project documentation — start at docs/README.md
-│   ├── status.md            where the work is; the single source of truth
-│   ├── roadmap.md           the pillars not built yet
-│   ├── memorandum.md        the founding vision document
-│   ├── adr/                 decision records the code must obey
-│   ├── setup/               toolchain and reference-repository notes
-│   ├── analysis/            audits of the codebase as found
-│   └── plans/               dated session plans and execution blueprints
-├── scripts/                 cargo.bat — use it, see CONTRIBUTING.md
-└── reference/               vendored upstream clones, git-ignored (docs/setup/)
+│   ├── native/                SwiftUI — iPhone, iPad, Mac (one shared codebase)
+│   └── desktop/               Tauri — engineering harness, NOT a shipping target
+├── docs/                      all project documentation — start at docs/README.md
+├── scripts/                   cargo.bat — the Windows build wrapper, see below
+└── reference/                 vendored upstream clones, git-ignored
 ```
 
-**Why this split:** the memorandum's "Pattern Engine" and "Material System"
-are the platform-independent core — the same geometry math and material
-model must produce identical results whether a designer is on an iPad or a
-Windows laptop. `engine/` is that core. `patal-ffi` is the seam: the Tauri
-desktop app links the engine crates directly (both are Rust), while the
-Swift app will link them through uniffi-generated bindings, packaged as an
-XCFramework, once Xcode is available to build that framework.
+### Design environment
 
-## Where each memorandum pillar lives
+**`apps/native`** — `PatalKit`, a Swift package holding model mirrors of the
+engine's domain types and a SwiftUI shell. It deliberately holds **no
+geometry**. A hand-ported offset kernel once lived here; it was deleted rather
+than pinned with a conformance corpus, because two implementations of the cut
+path is a liability whichever one drifts.
 
-| Memorandum pillar   | Lives in |
-|---------------------|----------|
-| Pattern Engine       | `engine/crates/geometry`, `engine/crates/pattern` |
-| Material System       | `engine/crates/materials` |
-| Design Environment    | `apps/native` (SwiftUI), `apps/desktop` (Tailwind) |
-| Platform Goals (iPhone/iPad/Mac/Windows) | `apps/native` covers the first three; `apps/desktop` covers Windows |
-| Intelligence           | Not yet started — deliberately deferred until the engine and design environment are solid enough to have something for an AI collaborator to act on |
+**`apps/desktop`** — an engineering harness, and explicitly not a product.
+[ADR-001](docs/adr/ADR-001-stack-selection.md) rejected Tauri as a shipping
+target; [ADR-005](docs/adr/ADR-005-tauri-as-engineering-harness.md) explains
+why it is unfrozen for development anyway. It is the only thing in this
+repository that runs on the Windows machine Pātāl is developed on: it draws a
+bodice front with live tolerance and seam-allowance sliders, reports per-frame
+cost against a 120 Hz budget, surfaces the engine's refusals verbatim, and
+writes and re-reads a real `.patal` file. Disposable by design.
 
-## Status
+---
 
-This is a foundation, not a product yet. What's real today, and what isn't:
+## Verification
 
-- `engine/`: real geometry — polygon perimeter, winding, and an outward/inward
-  seam-allowance offset with a mitre limit, self-intersection detection, and
-  `hypot`-based distance math. Every fallible input (non-finite coordinates,
-  a zero-length edge, an inset larger than the piece can give) returns a
-  typed `GeometryError` rather than a plausible-looking wrong number — there
-  is no silent corruption path left in this crate. A failed offset says
-  which two edges cross, so a UI can point at the problem rather than only
-  naming it. `PatternPiece` and `Project` sit on top with the same
-  discipline: `seam_allowance_mm` is validated, not a bare public field.
-  Curves live in a layer *above* the polygon kernel — `SeamPath` and
-  `EdgeSegment` are authored, `flatten` discretizes them, and the kernel is
-  untouched ([ADR-003](docs/adr/ADR-003-curve-representation.md)). A piece
-  stores the path it was *drawn* with, not the polygon that path flattens to:
-  the polygon is derived on demand at the document's own tolerance and is
-  never persisted, so a saved file can be edited back into its curves and
-  cannot assert an outline that disagrees with them. Materials have stable
-  identity, so does each piece, and a project carries a document schema
-  version ([ADR-004](docs/adr/ADR-004-document-format.md)). 168 tests across
-  the workspace — unit tests, a property suite, and a closed-form curve
-  oracle — `cargo clippy --workspace --all-targets -- -D warnings` clean,
-  `cargo deny` clean on all four checks.
-- `patal-export`: tiled PDF at true scale. A millimetre in the model is a
-  millimetre on the paper — there is no scale parameter and no fit-to-page,
-  `Mm` and `Pt` are distinct types with exactly one conversion between them,
-  and every sheet carries a 50mm calibration square so the claim is checkable
-  on the artifact, with a ruler, by someone who does not trust it. It draws
-  `CutLine`, which has no public constructor outside `patal-pattern`, so this
-  crate cannot invent a second opinion about where cloth gets cut. The PDF
-  writer is hand-rolled and dependency-free, because the golden test compares
-  bytes and a general-purpose PDF crate would stamp a clock into them.
-  **Not yet printed.** Everything above is the software agreeing with itself;
-  [docs/setup/printing.md](docs/setup/printing.md) is the measurement it still
-  has to survive.
-- `patal-ffi`: exports the engine's fallible boundary operations
-  (perimeter, offset) across the uniffi boundary as `Result`, not as NaN —
-  a caller on the other side gets a real error, not a number it has to
-  guess is wrong. This is verified by Rust-side round-trip tests only.
-  **No Swift bindings are generated or committed**, there is no XCFramework,
-  and nothing in `apps/native` calls into this crate yet — the seam exists
-  and is tested from the Rust side, but it is not yet a working pipeline.
-- `apps/native`: a Swift package (`PatalKit`) with hand-written model
-  mirrors of the engine's domain types plus a basic SwiftUI shell. It holds
-  `Point2`, `PatternBoundary` (construction invariant and `Codable` matching
-  the Rust engine's bare-point-array wire shape exactly), `Material`,
-  `PatternPiece`, and `Project`. It deliberately holds **no geometry**: the
-  368-line hand-ported offset kernel that used to live here was deleted, so
-  there is exactly one implementation of the math that decides where cloth
-  gets cut. See the note below. Never built or tested in this environment —
-  there is no macOS toolchain here, and CI's `native` job is the only
-  `swift build` this code has ever had.
-- `apps/desktop`: **an engineering harness, not a product.**
-  [ADR-001](docs/adr/ADR-001-stack-selection.md) rejected Tauri as a shipping
-  target and that stands; [ADR-005](docs/adr/ADR-005-tauri-as-engineering-harness.md)
-  explains why it is unfrozen for development anyway. It links the engine
-  crates directly with no FFI boundary, and it is the only thing in this repo
-  that runs on the Windows machine Pātāl is developed on. It draws a bodice
-  front with live tolerance and seam-allowance sliders, reports per-frame cost
-  against a 120Hz budget, shows the engine's refusals verbatim when an
-  allowance exceeds what the curvature can give, and writes a real `.patal`
-  file and reads it back. Disposable by design.
+```
+168 tests   ·   fmt   ·   clippy -D warnings   ·   rustdoc -D warnings   ·   cargo deny   ·   5 CI jobs
+```
 
-**There is now one implementation of the cut path, not two.** `PatalKit`
-used to carry a hand-ported copy of the offset kernel — same mitre limit,
-same bevel joins, same winding and self-intersection checks — which meant
-two independent implementations decided where cloth gets cut and nothing
-checked them against each other. That is a liability rather than a feature:
-whichever one drifts, a designer finds out in cloth. It was deleted rather
-than pinned in place with a cross-language conformance corpus, because
-nothing depended on it. There is no Xcode project in this repo, and the
-port's only caller was its own test suite. Seam-allowance geometry belongs
-to `patal-geometry` and will reach Swift through uniffi-generated bindings.
+Every pull request, and every push to `main`, runs the full matrix: the engine
+on Linux **and** Windows, the Tauri harness, the Swift package on macOS, and a
+non-blocking RustSec advisory scan that also runs weekly on a schedule. Broken
+intra-doc links are build failures. Dependency licences, bans and sources are
+enforced, not audited after the fact.
 
-Deleting it removed the second implementation; `CutLine` stops a third from
-appearing. It is minted only by `PatternPiece::cut_boundary(tolerance_mm)`,
-has a private field, and is what `patal-export` draws — so a crate that wants
-points to draw can read the kernel's answer and cannot compute its own. The
-rule moved out of the review checklist and into the compiler.
+Note that pushing a feature branch runs *nothing* — CI is bound to
+`pull_request` and to `main`. On this project "pushed" is not "green", which
+matters because the macOS jobs are the only place the Swift package is ever
+compiled.
 
-The tolerance obeys the same rule. It belongs to the document, so
-`export_tiled_pdf` takes a whole `&Project` rather than loose pieces and a
-number: a caller passing a tolerance that disagrees with the file's would
-produce a PDF that disagrees with the file, silently, in the direction that
-matters.
+The suite is layered on purpose:
 
-The remaining Swift/Rust gap is the identity model. Rust's `PatternPiece` now
-carries a `PieceId` — a UUID, `serde(transparent)`, so it is a bare string on
-the wire that `Foundation.UUID` decodes directly. Swift's mirror has not been
-updated to adopt it, so today both languages mint their own ids and
-`PatternPiece`'s `Codable` conformance is still Swift-to-Swift only, unlike
-`PatternBoundary`'s, which matches the Rust wire format exactly. Closing that
-is scheduled work, gated on a mirror-or-delete decision for `apps/native`.
+- **Unit tests** for behaviour at the type boundary.
+- **A property suite** over generated input — which is how it was discovered
+  that `serde_json` does not round-trip every `f64` without the
+  `float_roundtrip` feature, a genuine defect for a CAD file format.
+- **A closed-form curve oracle**, so the flattener is checked against an
+  analytic answer rather than against its own output.
+- **A byte-compared golden PDF**, viable only because the writer is
+  hand-rolled and stamps no clock — a general-purpose PDF crate would embed a
+  timestamp and make the comparison meaningless.
+- **A benchmark that has cancelled work.** The drag loop measured at roughly
+  1% of a 120 Hz frame at manufacturing tolerance, so a planned
+  coarse-preview-during-drag optimisation was dropped rather than built.
 
-What's deliberately not started: the parametric propagation/constraint
-solver (patterns as "a living system" where edits propagate), **DXF-AAMA/ASTM
-export**, multi-piece nesting, **grading**, the AI collaborator layer, and any
-visual identity (colors/type).
+### What a green build does not prove
 
-Grading deserves a sentence rather than a bullet, because with export it is
-one of the two capabilities that make this a pattern CAD application. It is
-pure Rust, runs on Windows with no Mac, and is testable headlessly. Export was
-the other, and it was taken first for the reason that still applies to
-grading: it is the cheapest route to validation that the test suite cannot
-fake — print at true scale and hand it to a pattern maker.
+This is the part most projects leave out, and it is the part that matters
+most here.
 
-Persistence exists as a *format*, not as file I/O. Every domain type derives
-`Serialize`/`Deserialize`, `Document` carries a `schema_version`, and
-material references are checked on load. What the engine does not do is touch
-the disk — no atomic write, no save/load API. The harness does that today, in
-disposable code.
+**The PDF has never been printed.** Every scale claim above is the software
+agreeing with itself. Rendered through pdfium the 50 mm calibration square
+measures 50.004 mm and the 200 mm rule 200.008 mm at 600 DPI — but no steel
+rule has been on paper, on two printers, with the driver recorded.
+[`docs/setup/printing.md`](docs/setup/printing.md) is the runbook for the
+measurement it still has to survive, and it is the only test in this project
+that can return the answer *"the software is wrong."*
+
+**No pattern maker has assessed the output.** A pattern that passes 168 tests
+and cannot be sewn is a pattern that fails. That verdict is outstanding.
+
+Claims in this repository are written to be falsifiable for exactly this
+reason. A number without a method behind it is decoration.
+
+---
 
 ## Getting started
 
 ### Prerequisites
 
-- **Rust** — the exact toolchain is pinned by `rust-toolchain.toml`; rustup
-  picks it up automatically the first time `cargo` runs in this checkout.
-- **On Windows: Visual Studio Build Tools** with the "Desktop development
-  with C++" workload. Rust's MSVC target links with `link.exe`, which ships
-  with that workload and nothing else.
-- **Node 20+** for the desktop app (`apps/desktop/.nvmrc` pins the version).
-- **macOS with full Xcode** for `apps/native` — the Command Line Tools alone
-  can `swift build` but cannot `swift test`, because `XCTest` ships with
-  Xcode proper.
+| | Requirement |
+|---|---|
+| **Rust** | Pinned by [`rust-toolchain.toml`](rust-toolchain.toml) (1.97.1). rustup picks it up automatically on first `cargo` invocation in this checkout. |
+| **Windows** | Visual Studio Build Tools with the **Desktop development with C++** workload — Rust's MSVC target links with `link.exe`, which ships with that workload and nothing else. |
+| **Node** | Pinned to 24.18.1 by [`apps/desktop/.nvmrc`](apps/desktop/.nvmrc); `nvm use` in that directory picks it up. Needed only for the desktop harness. |
+| **macOS + full Xcode** | For `apps/native`. Command Line Tools alone can `swift build` but cannot `swift test` — `XCTest` ships with Xcode proper. |
 
-### Building
+### Build and test
 
 ```sh
-# Engine
+# Engine — the core, and the only part with no platform requirements
 cd engine && cargo test --workspace
 
-# Native app (Swift package only, until Xcode wires it into a real app — see apps/native/README.md)
+# Swift package (until Xcode wires it into an app — see apps/native/README.md)
 cd apps/native && swift build
 
-# Desktop app
+# Engineering harness
 cd apps/desktop && npm install && npm run tauri dev
 ```
 
-### If you are on Windows and use Git Bash
+<details>
+<summary><b>Windows + Git Bash: read this before your first build fails</b></summary>
 
-`cargo build` will fail with something that looks nothing like the real
-problem:
+<br>
+
+`cargo build` fails with an error that looks nothing like the real problem:
 
 ```
 = note: /usr/bin/link: extra operand '/NOLOGO'
 error: linking with `link.exe` failed: exit code: 1
 ```
 
-Git Bash ships a coreutils `link` that shadows MSVC's `link.exe` on `PATH`,
-so cargo invokes the wrong program. **rustc's own hint is misleading here:**
-it suggests repairing your Visual Studio installation, which is fine and is
-not the problem.
+Git Bash ships a coreutils `link` that shadows MSVC's `link.exe` on `PATH`, so
+cargo invokes the wrong program. **rustc's own hint is misleading here** — it
+suggests repairing your Visual Studio installation, which is fine and is not
+the cause.
 
-Use the committed wrapper instead — it locates the toolset with `vswhere`,
-sources `vcvars64.bat`, and runs cargo with the right `PATH`:
+Use the committed wrapper. It locates the toolset with `vswhere`, sources
+`vcvars64.bat`, and runs cargo with a correct `PATH`:
 
 ```sh
 cmd //c 'scripts\cargo.bat test --workspace --locked'
@@ -230,21 +288,51 @@ cmd //c 'scripts\cargo.bat fmt --check'
 ```
 
 From PowerShell or `cmd`, drop the `cmd //c` and call `scripts\cargo.bat`
-directly. It defaults to the `engine/` workspace; set `PATAL_CARGO_DIR` to
-point it elsewhere:
+directly. It defaults to the `engine/` workspace; point it elsewhere with
+`PATAL_CARGO_DIR`:
 
 ```sh
 PATAL_CARGO_DIR='C:\path\to\patal\apps\desktop\src-tauri' cmd //c 'scripts\cargo.bat clippy'
 ```
 
 This deliberately stays out of `.cargo/config.toml`: the vcvars path is
-machine-local and would break CI, which already has a working linker.
+machine-local and would break CI, which already has a working linker. A
+"Developer Command Prompt for VS" works without the wrapper — the wrapper
+exists so the ordinary shell you already have open does the right thing.
 
-A "Developer Command Prompt for VS" also works and needs no wrapper — the
-wrapper exists so that the ordinary shell people already have open does the
-right thing.
+</details>
+
+Contribution conventions, including the commit and review standard, are in
+[`CONTRIBUTING.md`](CONTRIBUTING.md).
+
+---
+
+## Documentation
+
+Documentation lives in the repository, versioned alongside the code it
+describes — a rule you cannot read is not a rule.
+
+| Path | What lives there |
+|---|---|
+| [`docs/status.md`](docs/status.md) | Where the work actually is. Single source of truth; if anything disagrees with it, it wins. |
+| [`docs/roadmap.md`](docs/roadmap.md) | The pillars not built yet, and why that is fine. |
+| [`docs/memorandum.md`](docs/memorandum.md) | The founding vision document. |
+| [`docs/adr/`](docs/adr/) | Architecture Decision Records — constraints the code must obey, including what each decision *rejected* and what it must not be read as meaning. |
+| [`docs/analysis/`](docs/analysis/) | Domain and codebase audits, including the pattern primitive census and the incumbent persistence probe that supplies its evidence. |
+| [`docs/setup/`](docs/setup/) | Toolchain notes and the true-scale printing runbook. |
+| [`docs/plans/`](docs/plans/) | Dated execution blueprints, kept with their corrections visible rather than tidied after the fact. |
+
+---
 
 ## License
 
-Proprietary — see [`LICENSE`](LICENSE). The source is public for reference;
-that is not a grant of any right to use it.
+**Proprietary.** Copyright © 2026 satex25. All rights reserved. See
+[`LICENSE`](LICENSE).
+
+The source is published for reference and review. **Publication grants no
+licence** to use, copy, modify, or distribute it. Public and proprietary is
+the intended state, not an oversight.
+
+<div align="center">
+<sub>Built for the moment a pattern leaves the screen and meets the cloth.</sub>
+</div>
