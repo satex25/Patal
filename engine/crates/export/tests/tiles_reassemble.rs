@@ -17,12 +17,22 @@ mod common;
 use common::{parse, ParsedPage};
 use patal_export::{export_tiled_pdf, PageLayout};
 use patal_geometry::{PatternBoundary, Point2};
-use patal_pattern::PatternPiece;
+use patal_pattern::{PatternPiece, Project, DEFAULT_FLATTEN_TOLERANCE_MM};
 
 const PT_PER_MM: f64 = 72.0 / 25.4;
 
+/// Wraps loose pieces in a project at the default tolerance. See the same
+/// helper in `cut_line_is_the_kernels` for why export takes a document.
+fn project_of(pieces: &[&PatternPiece]) -> Project {
+    let mut project = Project::new("Export Fixture");
+    for piece in pieces {
+        project.add_piece((*piece).clone());
+    }
+    project
+}
+
 fn rect(name: &str, w: f64, h: f64) -> PatternPiece {
-    PatternPiece::new(
+    PatternPiece::from_boundary(
         name,
         PatternBoundary::new(vec![
             Point2::new(0.0, 0.0),
@@ -58,9 +68,11 @@ fn every_sheet_reconstructs_the_same_outline() {
     // A piece needing a 4 x 4 grid on A4: 600 x 700mm of cut line against a
     // 190 x 219mm window advancing 180 x 209mm.
     let piece = rect("Big Panel", 600.0, 700.0);
-    let expected = piece.cut_boundary().expect("cuts cleanly");
+    let expected = piece
+        .cut_boundary(DEFAULT_FLATTEN_TOLERANCE_MM)
+        .expect("cuts cleanly");
 
-    let pdf = export_tiled_pdf(&[&piece], &PageLayout::a4()).expect("exports");
+    let pdf = export_tiled_pdf(&project_of(&[&piece]), &PageLayout::a4()).expect("exports");
     let pages = parse(&pdf);
     let sheets = &pages[1..];
     assert!(
@@ -94,8 +106,10 @@ fn the_windows_cover_the_piece_with_no_gap_and_the_stated_overlap() {
     // against the origins the document declares, not against the grid code.
     let layout = PageLayout::a4();
     let piece = rect("Big Panel", 600.0, 700.0);
-    let cut = piece.cut_boundary().expect("cuts cleanly");
-    let pdf = export_tiled_pdf(&[&piece], &layout).expect("exports");
+    let cut = piece
+        .cut_boundary(DEFAULT_FLATTEN_TOLERANCE_MM)
+        .expect("cuts cleanly");
+    let pdf = export_tiled_pdf(&project_of(&[&piece]), &layout).expect("exports");
     let pages = parse(&pdf);
 
     let min_x = cut.points().iter().map(|p| p.x).fold(f64::MAX, f64::min);
@@ -177,7 +191,7 @@ fn overlapping_sheets_carry_the_same_registration_marks() {
     // what to call it are two sheets an operator cannot align, and a test
     // that only counts shared positions would pass on exactly that document.
     let piece = rect("Big Panel", 600.0, 300.0);
-    let pdf = export_tiled_pdf(&[&piece], &PageLayout::a4()).expect("exports");
+    let pdf = export_tiled_pdf(&project_of(&[&piece]), &PageLayout::a4()).expect("exports");
     let pages = parse(&pdf);
     let sheets = &pages[1..];
     assert!(sheets.len() >= 4, "expected a grid, got {}", sheets.len());
@@ -259,7 +273,7 @@ fn sheet_numbering_runs_top_left_to_bottom_right() {
     // The order pages come out of the printer has to be the order they get
     // taped, or the operator is sorting sixteen identical-looking sheets.
     let piece = rect("Big Panel", 600.0, 700.0);
-    let pdf = export_tiled_pdf(&[&piece], &PageLayout::a4()).expect("exports");
+    let pdf = export_tiled_pdf(&project_of(&[&piece]), &PageLayout::a4()).expect("exports");
     let pages = parse(&pdf);
 
     let rows: usize = pages[1].tile_field("rows").unwrap().parse().unwrap();
@@ -289,7 +303,7 @@ fn sheet_numbering_runs_top_left_to_bottom_right() {
 fn each_piece_gets_its_own_grid_at_its_own_origin() {
     let front = rect("Front", 100.0, 100.0);
     let back = rect("Back", 400.0, 100.0);
-    let pdf = export_tiled_pdf(&[&front, &back], &PageLayout::a4()).expect("exports");
+    let pdf = export_tiled_pdf(&project_of(&[&front, &back]), &PageLayout::a4()).expect("exports");
     let pages = parse(&pdf);
 
     let names: Vec<String> = pages[1..]

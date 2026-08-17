@@ -23,13 +23,23 @@ use std::path::PathBuf;
 
 use patal_export::{export_tiled_pdf, PageLayout};
 use patal_geometry::{PatternBoundary, Point2};
-use patal_pattern::PatternPiece;
+use patal_pattern::{PatternPiece, Project};
+
+/// Wraps loose pieces in a project at the default tolerance. See the same
+/// helper in `cut_line_is_the_kernels` for why export takes a document.
+fn project_of(pieces: &[&PatternPiece]) -> Project {
+    let mut project = Project::new("Export Fixture");
+    for piece in pieces {
+        project.add_piece((*piece).clone());
+    }
+    project
+}
 
 /// The fixture piece. Deliberately boring and deliberately fixed: a shape
 /// that spans four sheets, so the golden covers tiling, registration marks,
 /// the calibration strip and the calibration page in one file.
 fn fixture_piece() -> PatternPiece {
-    let mut piece = PatternPiece::new(
+    let mut piece = PatternPiece::from_boundary(
         "Golden Panel",
         PatternBoundary::new(vec![
             Point2::new(0.0, 0.0),
@@ -55,7 +65,8 @@ fn fixture_path() -> PathBuf {
 
 #[test]
 fn the_golden_panel_exports_to_exactly_the_bytes_it_did_last_time() {
-    let pdf = export_tiled_pdf(&[&fixture_piece()], &PageLayout::a4()).expect("exports");
+    let pdf =
+        export_tiled_pdf(&project_of(&[&fixture_piece()]), &PageLayout::a4()).expect("exports");
     let path = fixture_path();
 
     if std::env::var_os("PATAL_BLESS_GOLDEN").is_some() {

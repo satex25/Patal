@@ -141,12 +141,18 @@ struct SaveReport {
 #[tauri::command]
 fn save_demo_document(directory: String, tolerance_mm: f64) -> Result<SaveReport, String> {
     let path = bodice_front()?;
-    let boundary = path.flatten(tolerance_mm).map_err(|err| err.to_string())?;
 
     let mut project = Project::new("Harness Demo");
+    // The tolerance is the document's now, not this function's. It used to be
+    // spent here, immediately, flattening the path into a polygon that got
+    // stored — which is the exact gap §3.6 closes: the curves reached this
+    // line and did not leave it.
+    project
+        .set_flatten_tolerance_mm(tolerance_mm)
+        .map_err(|err| err.to_string())?;
     let wool = project.materials.add(Material::new("Wool Crepe"));
 
-    let mut piece = PatternPiece::new("Bodice Front", boundary);
+    let mut piece = PatternPiece::new("Bodice Front", path);
     piece.material = Some(wool);
     project.add_piece(piece);
 
@@ -215,15 +221,22 @@ fn export_demo_pdf(
     letter: bool,
 ) -> Result<ExportReport, String> {
     let path = bodice_front()?;
-    let boundary = path.flatten(tolerance_mm).map_err(|err| err.to_string())?;
-    let piece = PatternPiece::new("Bodice Front", boundary);
+
+    // Export reads the tolerance from the document (D6-A), so the slider's
+    // value goes on the project rather than into a flatten call here. The
+    // piece keeps its curves all the way to the PDF writer.
+    let mut project = Project::new("Harness Demo");
+    project
+        .set_flatten_tolerance_mm(tolerance_mm)
+        .map_err(|err| err.to_string())?;
+    project.add_piece(PatternPiece::new("Bodice Front", path));
 
     let layout = if letter {
         PageLayout::letter()
     } else {
         PageLayout::a4()
     };
-    let pdf = export_tiled_pdf(&[&piece], &layout).map_err(|err| err.to_string())?;
+    let pdf = export_tiled_pdf(&project, &layout).map_err(|err| err.to_string())?;
 
     let mut file: PathBuf = PathBuf::from(&directory);
     file.push("harness-demo.pdf");
