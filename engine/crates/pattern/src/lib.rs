@@ -1235,4 +1235,217 @@ mod tests {
         let piece = restored.find_piece("Skirt Panel").expect("piece present");
         assert_eq!(piece.seam_allowance_mm(), 15.0);
     }
+
+    /// **Review instrument for the v2 shape freeze — not a regression.**
+    ///
+    /// Delete this at Task 8, once the shape is signed off. It exists so the
+    /// operator signs off the *bytes* rather than a six-bullet prose summary
+    /// of them, which is the objection that stopped the freeze last session.
+    ///
+    /// Run it with:
+    ///
+    /// ```sh
+    /// cmd //c 'scripts\cargo.bat test --package patal-pattern -- --nocapture print_v2_shape'
+    /// ```
+    ///
+    /// It prints the document and then **asserts** each of the six points
+    /// being signed off. Printing alone would leave the reviewer diffing JSON
+    /// by eye against prose, which is exactly how a wrong shape gets waved
+    /// through; an assertion that fails is a claim the bytes do not support.
+    #[test]
+    fn print_v2_shape() {
+        use patal_geometry::{Edge, Join};
+
+        // A piece exercising every authored feature at once: a cubic, a
+        // genuinely tangent `Smooth` join, a grain line and a material
+        // reference. The join is load-bearing — `Join::Smooth` is validated,
+        // so this construction only survives if the tangents really are
+        // parallel and same-signed.
+        //
+        // Edge 0 leaves (0,0) along +x. Edge 1 is a cubic whose first control
+        // point is also due +x of its start, so the incoming and outgoing
+        // tangents are exactly collinear: sine is 0, not merely below the
+        // 1e-9 threshold.
+        let hem_start = Point2::new(0.0, 0.0);
+        let bodice = SeamPath::with_joins(
+            hem_start,
+            vec![
+                Edge::corner(EdgeSegment::Line {
+                    to: Point2::new(100.0, 0.0),
+                }),
+                Edge::new(
+                    EdgeSegment::Cubic {
+                        c1: Point2::new(150.0, 0.0),
+                        c2: Point2::new(200.0, 50.0),
+                        to: Point2::new(200.0, 100.0),
+                    },
+                    Join::Smooth,
+                ),
+                Edge::corner(EdgeSegment::Line {
+                    to: Point2::new(0.0, 100.0),
+                }),
+                Edge::corner(EdgeSegment::Line { to: hem_start }),
+            ],
+        )
+        .expect("the smooth join is tangent by construction");
+
+        let mut project = Project::new("Shape Freeze Review");
+        let wool = project.materials.add(Material::new("Wool Suiting"));
+
+        let mut front = PatternPiece::new("Bodice Front", bodice);
+        front.material = Some(wool);
+        front.set_grain(Some(
+            GrainLine::new(15.0, Point2::new(50.0, 50.0)).expect("valid grain"),
+        ));
+        project.add_piece(front);
+
+        // The second piece is deliberately bare: no grain, no material, all
+        // corner joins. It is what an unlaid, unassigned piece looks like on
+        // disk, and the null fields are as much a part of the shape being
+        // frozen as the populated ones.
+        project.add_piece(PatternPiece::new("Waistband", square_path(200.0)));
+
+        // Non-default on purpose. 0.01 is the default, so a document written
+        // at 0.01 cannot show whether the tolerance is persisted or merely
+        // defaulted back on load — the two are indistinguishable in the bytes.
+        project
+            .set_flatten_tolerance_mm(0.25)
+            .expect("0.25mm is a valid tolerance");
+
+        let document = Document::new(project);
+        let json = serde_json::to_string_pretty(&document).expect("document serialises");
+
+        println!(
+            "\n===== BEGIN v2 DOCUMENT SHAPE =====\n{json}\n===== END v2 DOCUMENT SHAPE =====\n"
+        );
+
+        // Re-read the printed bytes rather than the in-memory value. What is
+        // being signed off is what a file round-trips as, and only a reload
+        // proves the printed shape is one this build can actually read back.
+        let reloaded: Document = serde_json::from_str(&json).expect("the printed shape reloads");
+        let value: serde_json::Value = serde_json::from_str(&json).expect("valid json");
+        let piece = &value["project"]["pieces"][0];
+
+        // 1. A piece stores `outline` (a SeamPath) and never a polygon.
+        assert!(
+            piece["outline"]["start"].is_object() && piece["outline"]["edges"].is_array(),
+            "point 1: outline must be an authored path"
+        );
+        assert!(
+            piece.get("boundary").is_none() && piece["outline"].get("points").is_none(),
+            "point 1: no polygon may appear anywhere on a piece"
+        );
+
+        // 2. An edge is {geometry, join} — nested, not flat.
+        let cubic_edge = &piece["outline"]["edges"][1];
+        assert!(
+            cubic_edge["geometry"]["kind"] == "cubic",
+            "point 2: geometry must be nested under `geometry`, tagged by `kind`"
+        );
+        assert!(
+            cubic_edge.get("kind").is_none(),
+            "point 2: the edge must not carry the segment tag flattened onto itself"
+        );
+        assert_eq!(
+            cubic_edge["join"], "smooth",
+            "point 2: join sits beside geometry"
+        );
+
+        // 3. `join` may be omitted and means corner; `geometry` may not be.
+        //
+        // The claim holds on READ, and the round trip below proves it: a file
+        // with no `join` key loads as a corner.
+        let omitted = r#"{"start":{"x":0.0,"y":0.0},"edges":[
+            {"geometry":{"kind":"line","to":{"x":10.0,"y":0.0}}},
+            {"geometry":{"kind":"line","to":{"x":0.0,"y":0.0}}}
+        ]}"#;
+        let from_omitted: SeamPath =
+            serde_json::from_str(omitted).expect("point 3: `join` must be omittable on read");
+        assert_eq!(
+            from_omitted.edges()[0].join(),
+            Join::Corner,
+            "point 3: an omitted join must mean corner"
+        );
+
+        // ...but it does NOT hold on WRITE, and that asymmetry is FINDING 1 in
+        // the review dossier rather than something to quietly fix here. The
+        // wire format is the thing being frozen, so whether Pātāl emits this
+        // key is the operator's call, not the instrument's.
+        //
+        // This assertion pins the *current* behaviour so the dossier cannot
+        // drift from the build it describes. If the operator decides corner
+        // joins should be omitted, this is the line that flips.
+        assert_eq!(
+            piece["outline"]["edges"][0]["join"], "corner",
+            "FINDING 1: Pātāl writes `join: corner` explicitly; it is omittable on \
+             read but never omitted on write"
+        );
+
+        let no_geometry = r#"{"start":{"x":0.0,"y":0.0},"edges":[{"join":"corner"}]}"#;
+        assert!(
+            serde_json::from_str::<SeamPath>(no_geometry).is_err(),
+            "point 3: `geometry` must be required"
+        );
+
+        // 4. A piece carries id (bare UUID string), grain (nullable),
+        //    seam_allowance_mm, material.
+        assert!(
+            piece["id"]
+                .as_str()
+                .is_some_and(|s| Uuid::parse_str(s).is_ok()),
+            "point 4: id must be a bare UUID string, not a wrapper object"
+        );
+        assert!(
+            piece["grain"].is_object(),
+            "point 4: grain present when laid up"
+        );
+        assert!(
+            value["project"]["pieces"][1]["grain"].is_null(),
+            "point 4: grain must be nullable, and null when unlaid"
+        );
+        assert!(
+            piece["seam_allowance_mm"].is_number(),
+            "point 4: seam allowance"
+        );
+        assert!(
+            value["project"]["pieces"][1]["material"].is_null(),
+            "point 4: material is an optional reference"
+        );
+
+        // 5. A project carries flatten_tolerance_mm, defaulting to 0.01.
+        assert_eq!(
+            value["project"]["flatten_tolerance_mm"], 0.25,
+            "point 5: the authored tolerance must survive the file"
+        );
+        assert_eq!(
+            reloaded.project.flatten_tolerance_mm(),
+            0.25,
+            "point 5: and must survive the reload, not default back"
+        );
+        assert_eq!(
+            Project::default().flatten_tolerance_mm(),
+            DEFAULT_FLATTEN_TOLERANCE_MM,
+            "point 5: the default is what the freeze claims it is"
+        );
+
+        // 6. Deliberately absent: per-edge seam allowance (P-03), fold edges
+        //    (P-05), notch anchors (P-13). The Edge container is what makes
+        //    each of them a later field rather than a schema v3, so their
+        //    absence now is the claim being signed.
+        for absent in ["seam_allowance_mm", "fold", "notches"] {
+            assert!(
+                cubic_edge.get(absent).is_none(),
+                "point 6: `{absent}` must not be on an edge yet"
+            );
+        }
+
+        // The version is still 1: Tasks 1-7 changed the *shape*, and Task 8 is
+        // what bumps the number and writes the migration. Signing this shape is
+        // what unblocks that, so the reviewer should expect 1 here and not read
+        // it as the shape being unchanged.
+        assert_eq!(
+            value["schema_version"], 1,
+            "the bump to 2 is Task 8's job, not something Tasks 1-7 did"
+        );
+    }
 }
