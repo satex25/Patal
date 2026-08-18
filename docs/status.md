@@ -56,6 +56,20 @@ The breakdown is spelled out because the two numbers are both defensible and the
 had them disagreeing: `cargo test` reports 168, of which the doc-test is one. Quote the
 total and say what is in it, rather than picking whichever count a given sentence needs.
 
+**Since the wave — Chunk A's review and Task 11.** The count is now **169**: 168 plus the
+temporary `print_v2_shape` review instrument, which Task 8 deletes. `fmt`, `clippy -D
+warnings` and the full suite re-verified on that tree.
+
+**Task 11 is done, and the no-cache decision holds.** One piece's `cut_boundary` at the
+default 0.01mm is 183µs — 2.2% of a 120Hz frame — and a drag dirties one piece, so trading
+a second source of truth for where cloth gets cut to reclaim that is not worth it. **Do not
+add a boundary cache.** The bench, `engine/crates/pattern/benches/cache_decision.rs`, found
+something worth more than the decision: recomputing *every* cut line in a 50-piece document
+costs **8.77ms, more than a whole frame**. That is not a cache problem — a full recompute
+happens on export or load, where it is imperceptible — it is a rendering constraint. **The
+canvas must never recompute all cut lines per frame; only dirty pieces may.** Record it
+before a canvas is built, not after.
+
 **The storage wave is seven tasks in, of twelve.** `PatternPiece` now stores the `SeamPath`
 the designer drew rather than the polygon it flattens to — the gap the wave exists to
 close, where the Tauri harness flattened a path and handed the polygon to
@@ -119,9 +133,24 @@ format.
 is a one-way door: once the migration is written against a shape, changing the shape means
 changing the migration.
 
-The instrument for reviewing it is in the execution plan — a temporary `print_v2_shape`
-test that serialises a two-piece project with one cubic edge, one `Smooth` join, a grain
-line and a non-default tolerance, and prints it. It is a review instrument, not a
+> [!important] The review is done and waiting on you
+> **[The v2 shape freeze dossier](plans/2026-08-17-v2-shape-freeze-review.md)** — the
+> actual serialised bytes, with each of the six claims below checked mechanically against
+> them rather than read as prose.
+>
+> **Five of the six hold exactly. The sixth does not.** `join` is omittable on *read* but
+> Pātāl never omits it on *write*, so every document manufactures the explicit claim that
+> `Join::Corner`'s own doc comment says omission exists to avoid — 6.3% of a document,
+> ~28KB on a 50-piece garment. **Decide that before signing**, because after the migration
+> exists, changing it costs another migration.
+>
+> Confirmed while reviewing: freezing v2 genuinely does not decide whether a dart is an
+> object, so the freeze is safe to sign while K3 is outstanding.
+
+`print_v2_shape` — the instrument that produced it — is a temporary test in
+`engine/crates/pattern/src/lib.rs`. It serialises a two-piece project with one cubic edge,
+one `Smooth` join, a grain line and a non-default tolerance, prints it, and asserts each of
+the six points against the output. It is a review instrument, not a
 regression; delete it once the shape is signed off.
 
 What signing off means, stated plainly:

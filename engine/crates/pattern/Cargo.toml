@@ -14,3 +14,13 @@ uuid = { workspace = true }
 
 [dev-dependencies]
 serde_json = { workspace = true }
+criterion = { workspace = true }
+
+# Lives here rather than beside `drag_loop` in patal-geometry, which is where
+# the execution plan first put it. `PatternPiece` and `Project` are this
+# crate's types, and benching them from the geometry crate would mean
+# patal-geometry dev-depending on patal-pattern — inverting the one dependency
+# direction the crate split exists to enforce. See the bench's own header.
+[[bench]]
+name = "cache_decision"
+harness = false

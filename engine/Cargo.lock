@@ -642,6 +642,7 @@ dependencies = [
 name = "patal-pattern"
 version = "0.1.0"
 dependencies = [
+ "criterion",
  "patal-geometry",
  "patal-materials",
  "serde",

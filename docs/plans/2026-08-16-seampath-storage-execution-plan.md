@@ -2702,7 +2702,20 @@ git commit -m "Mirror the v2 shape in Swift, and nothing else"
 optimisation. This is where that call either holds or does not — and it rests on last
 wave's measurement of *one* piece, which is why the 50-piece case exists.
 
-**Files:** Modify `engine/crates/geometry/benches/drag_loop.rs`.
+**Files:** ~~Modify `engine/crates/geometry/benches/drag_loop.rs`.~~
+**DEVIATION, corrected 2026-08-17:** create `engine/crates/pattern/benches/cache_decision.rs`
+instead. `PatternPiece` and `Project` are `patal-pattern`'s types and `patal-pattern`
+already depends on `patal-geometry`, so benching them from the geometry bench would
+require `patal-geometry` to dev-depend on `patal-pattern`. Cargo permits that cycle, but
+it inverts the one dependency direction the crate split exists to enforce and pulls the
+whole pattern layer into the kernel's bench build. `drag_loop` stays kernel-only.
+
+**A second deviation, and it changed the answer.** This task as written measures only
+`total_perimeter_mm`, which takes the *cheap* path — plain `flatten`, no offset, no O(n²)
+self-intersection test. A boundary cache would serve the *expensive* path, so the bench
+also measures every piece's `cut_boundary` at document scale. That case is the one that
+exceeds a frame (8.77ms at 50 pieces); measuring only what this task specified would have
+missed it entirely. See the bench header for the full table and the conclusion.
 
 - [ ] **Step 1: Extend the bench**
 

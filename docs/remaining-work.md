@@ -15,7 +15,7 @@ review: every session
 true, and bump `updated:` in the frontmatter. If this page and reality disagree, this page
 is wrong and should be fixed on the spot. Undated filename on purpose.
 
-**Progress: 0 / 31 complete.** *(A 0/6 · B 0/6 · C 0/6 · D 0/5 · E 0/5 · F 0/3)*
+**Progress: 5 / 34 complete.** *(A 4/7 · B 1/6 · C 0/6 · D 0/5 · E 0/5 · F 0/5)*
 
 **Not a fourth tracker.** [status.md](status.md) owns *state*, [roadmap.md](roadmap.md)
 owns *why*, [TODOS.md](../TODOS.md) owns *deferred items with context*. This page owns one
@@ -26,30 +26,37 @@ thing: what is left, in what order, and what blocks what.
 
 ---
 
-## A — The v2 shape freeze ⛔ · 0/6
+## A — The v2 shape freeze ⛔ · 4/7
 
 The gate everything downstream waits on. Cheap, and the highest-leverage item on this page.
 
-- [ ] Add a temporary `#[test] fn print_v2_shape()` — a two-piece project with one cubic edge, one `Smooth` join, a grain line and a non-default tolerance, printed pretty `S`
-- [ ] Run it and **read the actual JSON**, not the prose summary
-- [ ] Check it against the six points in [status.md](status.md) — outline never a polygon · edge nested `{geometry, join}` · `join` omittable = corner · piece carries `id`/`grain`/`seam_allowance_mm`/`material` · project carries `flatten_tolerance_mm` · P-03/P-05/P-13 deliberately absent
-- [ ] Confirm the load-bearing reading: **freezing v2 does not decide whether a dart is an object** — a dart is an additive field either way
+**The review is done and waiting on you:
+[the shape freeze dossier](plans/2026-08-17-v2-shape-freeze-review.md)** — the actual bytes,
+each of the six claims checked mechanically against them, and **one finding that needs a
+decision before signing means anything.**
+
+- [x] Add a temporary `#[test] fn print_v2_shape()` — a two-piece project with one cubic edge, one `Smooth` join, a grain line and a non-default tolerance, printed pretty `S`
+- [x] Run it and **read the actual JSON**, not the prose summary
+- [x] Check it against the six points in [status.md](status.md) — outline never a polygon · edge nested `{geometry, join}` · `join` omittable = corner · piece carries `id`/`grain`/`seam_allowance_mm`/`material` · project carries `flatten_tolerance_mm` · P-03/P-05/P-13 deliberately absent. **Five hold exactly. The sixth does not:** `join` is omittable on *read* but Pātāl never omits it on *write*, so every document manufactures the explicit claim `Join::Corner`'s own doc comment says omission exists to avoid — 6.3% of a document, ~28KB on a 50-piece garment
+- [x] Confirm the load-bearing reading: **freezing v2 does not decide whether a dart is an object** — a dart is an additive field either way. **Confirmed; the freeze is safe to sign while K3 is outstanding**
+- [ ] ⛔ **Decide Finding 1 — omit corner joins on write, or keep them and fix the doc comment.** Cheapest now: after the migration exists, changing it costs another migration
 - [ ] ⛔ **Sign, or revise the shape**
-- [ ] Delete `print_v2_shape` — a review instrument, not a regression
+- [ ] Delete `print_v2_shape` — a review instrument, not a regression. Task 8's first act
 
 ---
 
-## B — Finish the storage wave · 0/6
+## B — Finish the storage wave · 1/6
 
 Tasks 8–12 of 12. Spec: [the execution plan](plans/2026-08-16-seampath-storage-execution-plan.md).
 Tasks 1–7 shipped 2026-08-17. **Every "expect N tests" in that plan is understated by 2** —
-PR #5 moved the baseline. Live count: **168**.
+PR #5 moved the baseline. Live count: **169** — 168 plus the temporary
+`print_v2_shape` review instrument, which Task 8 deletes.
 
 - [ ] **Task 8 — schema v2 + migration** `L` ⟵ blocked by **A**. Biggest task left (~394 lines of spec): version-tolerant loader, frozen historical shape, `TryFrom` dispatch that *rejects* wrong-version fields, migration as a pure function, v1 + v2 fixtures. Own session.
 - [ ] **Task 9 — the harness proves the curves came back** `M` · Windows. `SaveReport` reports segment and cubic counts. Also where `cut_preview` gets rerouted through `Project::cut_boundary`, deliberately skipped in Task 7.
 - [ ] ⛔ **Gate — Swift: mirror or delete.** Blueprint §6 says mirror. Counter worth weighing: `apps/native` is 555 lines, no Xcode project, never built outside CI, holds no geometry, `Codable` is Swift-to-Swift only. A mirror nothing exercises drifts silently — the argument that deleted the Swift offset kernel.
 - [ ] **Task 10 — Swift mirrors the v2 shape** `M` 🍎 ⟵ only if the gate says mirror. Writable on Windows, verifiable only via CI's `native` job.
-- [ ] **Task 11 — benchmarks measure the no-cache decision** `S`. Decides whether `PatternPiece` ever gets a cached boundary. Do not add one without this.
+- [x] **Task 11 — benchmarks measure the no-cache decision** `S`. **Done 2026-08-17.** `engine/crates/pattern/benches/cache_decision.rs` — not in `drag_loop.rs` as planned, which would have inverted the crate dependency. **The no-cache call holds**: one piece at the default 0.01mm is 183µs, 2.2% of a frame, and a drag dirties one piece. Do not add a cache.
 - [ ] **Task 12 — ADR-007 + doc close-out** `M` · **non-negotiable.** D6 (export's project-aware signature) currently lives only in a plan file and the ADR index. Must carry D1–D4, the C9 argument, D6 **with both rejections**, and the signed freeze.
 
 ---
@@ -92,11 +99,13 @@ Gates the *product surface*, not the engineering. Nothing in A–D depends on an
 
 ---
 
-## F — Hygiene · 0/3
+## F — Hygiene · 0/5
 
 - [ ] **Windows CI job for the Tauri harness** `S` — `desktop` runs on `macos-latest` only, so the harness is never built on the one platform it is actually used on. A Windows-specific break would be caught only by running it locally.
 - [ ] **Schedule the harness's disposal** `S` — [ADR-005](adr/ADR-005-tauri-as-engineering-harness.md) calls Tauri disposable; every wave adds a command to it and nothing schedules the disposal, so "disposable" drifts toward "permanent". Probable trigger: when Metal renders a piece on a Mac.
 - [ ] **`_to_delete/`** — verified safe to remove (its bundle holds only `1f91066`, an ancestor of `main`). Kept deliberately 2026-08-17. `rm -rf` is blocked by a permission guard; run it yourself if you want it gone.
+- [ ] **Follow-up from Task 11 — `total_perimeter_mm` tripped its own tripwire** `S`. The plan said a 50-piece perimeter above "a few percent" of a frame meant the cache decision was wrong. It measured **7.8%**. Recorded rather than waved through, and no cache was added — it is a document statistic recomputed on edit, not a per-frame call, so the practical answer is unchanged. Close this by either widening the tripwire with the reasoning, or moving the call off the edit path.
+- [ ] **Re-measure `drag_loop`'s header table, and name the machine** `S`. Its recorded 2026-08-12 figures do not reproduce: 88µs at 0.01mm re-measures as **429µs** here, with every tolerance 2.3–7× slower — the signature of different hardware, not a regression. Its conclusion survives (429µs is 5.2% of a frame), but a table quoted as settled evidence should say what it was taken on.
 
 ---
 
